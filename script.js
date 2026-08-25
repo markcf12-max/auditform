@@ -54,15 +54,51 @@ const AUDIT_TAXONOMY = {
     }
   ],
   'Safe and Secure': [
-    { parameter: 'Did we follow the customer authentication process?', description: '', constraints: [] },
-    { parameter: 'Did we follow the data privacy policy?', description: '', constraints: [] },
-    { parameter: 'Did we update the customer information in the tool?', description: '', constraints: [] },
-    { parameter: 'Did we follow the CSAT/NPS process?', description: '', constraints: [] },
-    { parameter: 'Did we follow the system documentation process?', description: '', constraints: [] },
-    { parameter: 'Did we follow the system tagging process?', description: '', constraints: [] },
-    { parameter: 'Did we follow correct grammar, technical writing & the prescribed language?', description: '', constraints: [] },
-    { parameter: 'Did the agent offer self-care help to the customer?', description: '', constraints: [] },
-    { parameter: 'Did the agent upsell or cross-sell relevant products & services?', description: '', constraints: [] }
+    {
+      parameter: 'Did we follow the customer authentication process?',
+      description: '',
+      constraints: ['No Authentication', 'Unnecessary authentication', 'Did not decline for failed authentication', 'Incorrect/Untimely authentication', 'Incomplete authentication']
+    },
+    {
+      parameter: 'Did we follow the data privacy policy?',
+      description: '',
+      constraints: ['Divulging Customer Information', 'Divulging internal company processes', 'Divulging internal personnel contacts/information', 'Did not deliver the Outbound Call Monitoring Spiel']
+    },
+    {
+      parameter: 'Did we update the customer information in the tool?',
+      description: '',
+      constraints: ['Failed to update primary contact information', 'Failed to update secondary contact information']
+    },
+    {
+      parameter: 'Did we follow the CSAT/NPS process?',
+      description: '',
+      constraints: ['Did not ask for the mobile number', 'Did not update the mobile number field', 'Did not follow the prescribed spiel', 'Did not offer CSAT (For non-Medallia LOBs)']
+    },
+    {
+      parameter: 'Did we follow the system documentation process?',
+      description: '',
+      constraints: ['Did not document the interaction', 'Incorrect documentation', 'Incomplete documentation', 'Incomplete & Incorrect documentation']
+    },
+    {
+      parameter: 'Did we follow the system tagging process?',
+      description: 'Ensure correct & complete tagging in all applicable tools such as ESA, Salesforce, Premiere Daily Tracker, etc.',
+      constraints: ['No Tagging', 'Incorrect tagging', 'Incomplete tagging', 'Incomplete & Incorrect tagging']
+    },
+    {
+      parameter: 'Did we follow correct grammar, technical writing & the prescribed language?',
+      description: '',
+      constraints: ['Incorrect punctuation', 'Incorrect spelling', 'Incorrect capitalization', 'Grammar errors', 'Did not follow the prescribed language']
+    },
+    {
+      parameter: 'Did the agent offer self-care help to the customer?',
+      description: '',
+      constraints: ['Did not offer Self Care Channel', 'Incomplete Self Care Channel', 'Irrelevant Self Care Channel']
+    },
+    {
+      parameter: 'Did the agent upsell or cross-sell relevant products & services?',
+      description: '',
+      constraints: ['Did not offer upsell/cross sell', 'Irrelevant/Unnecessary product offered', 'Incomplete information']
+    }
   ]
 };
 
