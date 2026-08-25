@@ -26,6 +26,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/fireba
 
   let rows = JSON.parse(JSON.stringify(defaultRows));
   let currentAuditId = null;
+  const DRAFT_KEY = 'auditDraftV1';
 
   const rowsContainer = document.getElementById('rowsContainer');
   const report = document.getElementById('report');
@@ -33,7 +34,33 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/fireba
   const statusMsg = document.getElementById('statusMsg');
 
   const headerFields = ['hdrAgent', 'hdrTL', 'hdrWin', 'winId', 'ani', 'agentName', 'caseId', 'teamLeader', 'interactionDate', 'evaluator', 'evalDate'];
-  headerFields.forEach(id => document.getElementById(id).addEventListener('input', render));
+
+  function saveDraft() {
+    try {
+      const draft = collectFormData();
+      draft.currentAuditId = currentAuditId;
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } catch (e) {
+      console.error('Could not save draft', e);
+    }
+  }
+
+  function loadDraft() {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) {
+      console.error('Could not read draft', e);
+      return null;
+    }
+  }
+
+  function clearDraft() {
+    try { localStorage.removeItem(DRAFT_KEY); } catch (e) { /* ignore */ }
+  }
+
+  headerFields.forEach(id => document.getElementById(id).addEventListener('input', () => { render(); saveDraft(); }));
 
   function escapeHtml(str) {
     return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -92,6 +119,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/fireba
         const key = e.target.getAttribute('data-key');
         rows[idx][key] = e.target.value;
         render();
+        saveDraft();
       });
     });
 
@@ -101,6 +129,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/fireba
         rows.splice(idx, 1);
         renderRowEditors();
         render();
+        saveDraft();
       });
     });
   }
@@ -109,6 +138,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/fireba
     rows.push(blankRow());
     renderRowEditors();
     render();
+    saveDraft();
   });
 
   document.getElementById('newBtn').addEventListener('click', () => {
@@ -119,6 +149,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/fireba
       interactionDate: '', evaluator: '', evalDate: '',
       rows: [blankRow()]
     });
+    clearDraft();
     setStatus('Started a blank audit', 'ok');
   });
 
@@ -126,7 +157,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/fireba
 
   document.getElementById('copyBtn').addEventListener('click', async () => {
     render(); // make sure preview reflects the latest edits before copying
-    const htmlContent = report.innerHTML;
+    const htmlContent = buildInlineStyledReport();
     const textContent = report.innerText;
 
     try {
@@ -150,6 +181,51 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/fireba
       }
     }
   });
+
+  // Paste targets (Gmail, Outlook, Slack, Teams, Word) don't load our stylesheet,
+  // so the copied HTML needs every color/border/spacing written as inline styles.
+  function buildInlineStyledReport() {
+    const cellStyle = 'border:1px solid #8c8c8c;padding:8px 10px;vertical-align:top;font-size:13px;font-family:Calibri,Arial,sans-serif;';
+    const greenCellStyle = cellStyle + 'background:#c6e0b4;font-weight:700;';
+    const yellowHeaderStyle = cellStyle + 'background:#ffe699;font-weight:700;text-align:center;';
+    const boldCellStyle = cellStyle + 'font-weight:700;';
+    const tableStyle = 'border-collapse:collapse;width:100%;margin-top:14px;';
+    const pStyle = 'margin:0 0 10px;line-height:1.5;font-family:Calibri,Arial,sans-serif;font-size:13.5px;color:#000;';
+
+    const bodyRows = rows.map(r => `
+      <tr>
+        <td style="${boldCellStyle}">${escapeHtml(r.category)}</td>
+        <td style="${cellStyle}">${escapeHtml(r.parameter)}</td>
+        <td style="${cellStyle}">${escapeHtml(r.constraint)}</td>
+        <td style="${cellStyle}">${escapeHtml(r.remark)}</td>
+      </tr>
+    `).join('');
+
+    return `
+      <p style="${pStyle}">Hi @${escapeHtml(val('hdrAgent'))},</p>
+      <p style="${pStyle}">Please see below your audit ${escapeHtml(val('hdrWin'))}. We encourage you to review the areas of opportunity highlighted, as these will support continuous improvement. Your acknowledgment will be sincerely appreciated.</p>
+      <p style="${pStyle}">Hi TL @${escapeHtml(val('hdrTL'))},</p>
+      <p style="${pStyle}">Kindly help us coach the agent immediately to avoid the recurrence of the observed opportunity.</p>
+
+      <table style="${tableStyle}">
+        <tbody>
+          <tr><td style="${greenCellStyle}">WIN ID</td><td style="${cellStyle}">${escapeHtml(val('winId'))}</td><td style="${greenCellStyle}">ANI/MIN</td><td style="${boldCellStyle}">${escapeHtml(val('ani'))}</td></tr>
+          <tr><td style="${greenCellStyle}">Agent name</td><td style="${cellStyle}">${escapeHtml(val('agentName'))}</td><td style="${greenCellStyle}">Call/case ID</td><td style="${cellStyle}">${escapeHtml(val('caseId'))}</td></tr>
+          <tr><td style="${greenCellStyle}">Team leader</td><td style="${cellStyle}">${escapeHtml(val('teamLeader'))}</td><td style="${greenCellStyle}">Date and time of interaction</td><td style="${cellStyle}">${escapeHtml(val('interactionDate'))}</td></tr>
+          <tr><td style="${greenCellStyle}">Evaluator's name</td><td style="${cellStyle}">${escapeHtml(val('evaluator'))}</td><td style="${greenCellStyle}">Evaluation date</td><td style="${cellStyle}">${escapeHtml(val('evalDate'))}</td></tr>
+        </tbody>
+      </table>
+
+      <table style="${tableStyle}">
+        <thead>
+          <tr><th style="${yellowHeaderStyle}">Category</th><th style="${yellowHeaderStyle}">Parameter</th><th style="${yellowHeaderStyle}">Constraint</th><th style="${yellowHeaderStyle}">Remark</th></tr>
+        </thead>
+        <tbody>
+          ${bodyRows}
+        </tbody>
+      </table>
+    `;
+  }
 
   function render() {
     const bodyRows = rows.map(r => `
@@ -246,6 +322,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/fireba
       }
       currentAuditId = id;
       applyFormData(snap.data());
+      saveDraft();
       setStatus('Loaded', 'ok');
     } catch (e) {
       console.error(e);
@@ -287,6 +364,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/fireba
         const ref = await addDoc(auditsCol, data);
         currentAuditId = ref.id;
       }
+      saveDraft();
       setStatus('Saved', 'ok');
     } catch (e) {
       console.error(e);
@@ -297,5 +375,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/fireba
   });
 
   /* ---------------- Init ---------------- */
-  renderRowEditors();
-  render();
+  const existingDraft = loadDraft();
+  if (existingDraft) {
+    currentAuditId = existingDraft.currentAuditId || null;
+    rows = Array.isArray(existingDraft.rows) && existingDraft.rows.length ? existingDraft.rows : [blankRow()];
+    renderRowEditors();
+    headerFields.forEach(id => { if (id in existingDraft) document.getElementById(id).value = existingDraft[id] || ''; });
+    render();
+  } else {
+    renderRowEditors();
+    render();
+  }
