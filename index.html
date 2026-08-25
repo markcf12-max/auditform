@@ -3,60 +3,62 @@
 <head>
 <meta charset="UTF-8">
 <title>QA Audit Report App</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <div class="app">
 
-  <div class="no-print">
-    <h1>QA audit report app</h1>
-    <p class="sub">Connected to Firestore &mdash; audits save to your database and sync live across every tab you open this in.</p>
+  <div class="no-print topbar">
+    <div>
+      <h1>QA audit report app</h1>
+      <p class="sub">Connected to Firestore — audits save to your database and sync live across every tab you open this in.</p>
+    </div>
   </div>
 
   <div class="panel no-print">
-    <h2>Saved audits</h2>
+    <div class="panel-head">
+      <h2>Saved audits</h2>
+      <input id="searchAudits" class="search-input" type="search" placeholder="Search by WIN ID, agent, or case #">
+    </div>
     <div id="savedList" class="saved-list"><p class="empty-note">Connecting to Firestore…</p></div>
   </div>
 
   <div class="panel no-print">
-    <h2>Message header</h2>
+    <div class="panel-head"><h2>Audit details</h2></div>
     <div class="field-grid">
-      <div class="field"><label>Agent name (for greeting)</label><input id="hdrAgent" value="Reyes, Hans Adam"></div>
-      <div class="field"><label>Team leader (for greeting)</label><input id="hdrTL" value="Abinan, Rachelle"></div>
-      <div class="field"><label>WEEKENDING (referenced in intro line)</label><input id="hdrWin" value="WE0816"></div>
+      <div class="field"><label>Audit reference <span class="hint">(shown in greeting, e.g. WE0816)</span></label><input id="hdrWin" placeholder="WE0816"></div>
+      <div class="field"><label>WIN ID</label><input id="winId" placeholder="52575800"></div>
+      <div class="field"><label>ANI/MIN</label><input id="ani" placeholder="9688516097"></div>
+      <div class="field"><label>Agent name</label><input id="agentName" placeholder="Reyes, Hans Adam"></div>
+      <div class="field"><label>Call/case ID</label><input id="caseId" placeholder="64449138"></div>
+      <div class="field"><label>Team leader</label><input id="teamLeader" placeholder="Abinan, Rachelle"></div>
+      <div class="field"><label>Date and time of interaction</label><input id="interactionDate" placeholder="8/12/2026 8:15 PM"></div>
+      <div class="field"><label>Evaluator's name</label><input id="evaluator" placeholder="Angela Planas"></div>
+      <div class="field"><label>Evaluation date</label><input id="evalDate" placeholder="8/13/2026"></div>
     </div>
   </div>
 
   <div class="panel no-print">
-    <h2>Audit details</h2>
-    <div class="field-grid">
-      <div class="field"><label>WIN ID</label><input id="winId" value="52575800"></div>
-      <div class="field"><label>ANI/MIN</label><input id="ani" value="9688516097"></div>
-      <div class="field"><label>Agent name</label><input id="agentName" value="Reyes, Hans Adam"></div>
-      <div class="field"><label>Call/case ID</label><input id="caseId" value="64449138"></div>
-      <div class="field"><label>Team leader</label><input id="teamLeader" value="Abinan, Rachelle"></div>
-      <div class="field"><label>Date and time of interaction</label><input id="interactionDate" value="8/12/2026 8:15 PM"></div>
-      <div class="field"><label>Evaluator's name</label><input id="evaluator" value="Angela Planas"></div>
-      <div class="field"><label>Evaluation date</label><input id="evalDate" value="8/13/2026"></div>
-    </div>
-  </div>
-
-  <div class="panel no-print">
-    <h2>Findings</h2>
+    <div class="panel-head"><h2>Findings</h2></div>
     <div id="rowsContainer"></div>
-    <button class="btn" id="addRowBtn" type="button">+ Add finding</button>
+    <button class="btn" id="addRowBtn" type="button"><span class="icon">+</span> Add finding</button>
   </div>
 
-  <div class="panel no-print actions-bar">
-    <button class="btn btn-primary" id="saveBtn" type="button">Save audit</button>
+  <div class="no-print"><h2 class="preview-title">Preview</h2></div>
+  <p class="preview-hint no-print">Click any value below to edit it directly — changes save automatically and sync with the form above.</p>
+  <div id="report"></div>
+
+  <div class="panel no-print actions-bar sticky-bar">
+    <button class="btn btn-primary" id="saveBtn" type="button">Save audit <span class="kbd">Ctrl+S</span></button>
+    <button class="btn" id="duplicateCurrentBtn" type="button">Duplicate as new</button>
     <button class="btn" id="newBtn" type="button">Start new (blank)</button>
     <button class="btn" id="copyBtn" type="button">Copy report</button>
     <button class="btn" id="printBtn" type="button">Print / Save as PDF</button>
     <span id="statusMsg" class="status"></span>
   </div>
-
-  <div class="no-print"><h2 style="font-size:14px;">Preview</h2></div>
-  <div id="report"></div>
 
 </div>
 
