@@ -124,6 +124,33 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/fireba
 
   document.getElementById('printBtn').addEventListener('click', () => window.print());
 
+  document.getElementById('copyBtn').addEventListener('click', async () => {
+    render(); // make sure preview reflects the latest edits before copying
+    const htmlContent = report.innerHTML;
+    const textContent = report.innerText;
+
+    try {
+      if (window.ClipboardItem) {
+        const item = new ClipboardItem({
+          'text/html': new Blob([htmlContent], { type: 'text/html' }),
+          'text/plain': new Blob([textContent], { type: 'text/plain' })
+        });
+        await navigator.clipboard.write([item]);
+      } else {
+        await navigator.clipboard.writeText(textContent);
+      }
+      setStatus('Copied — paste it into an email or chat', 'ok');
+    } catch (e) {
+      console.error(e);
+      try {
+        await navigator.clipboard.writeText(textContent);
+        setStatus('Copied as plain text', 'ok');
+      } catch (e2) {
+        setStatus('Could not copy — try selecting the preview manually', 'err');
+      }
+    }
+  });
+
   function render() {
     const bodyRows = rows.map(r => `
       <tr>
