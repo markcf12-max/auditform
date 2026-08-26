@@ -88,6 +88,12 @@ h1{font-size:22px;font-weight:700;margin:0 0 4px;letter-spacing:-.01em;}
 }
 .field textarea{resize:vertical;min-height:60px;}
 
+.locked-field{display:flex;gap:6px;align-items:stretch;}
+.locked-field input{flex:1;}
+.btn-tiny{padding:0 12px;font-size:11.5px;flex-shrink:0;}
+.field input[readonly]{background:#eef0f2;color:#555;cursor:not-allowed;border-color:var(--card-border);}
+.field input[readonly]:focus{box-shadow:none;border-color:var(--card-border);}
+
 .row-item{
   border:1px solid var(--card-border);border-radius:var(--radius-sm);
   padding:14px 16px;margin-bottom:12px;background:#fafbfc;
