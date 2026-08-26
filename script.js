@@ -129,7 +129,14 @@ let currentAuditId = null;
 let latestDocs = []; // last snapshot from Firestore, kept for client-side search filtering
 
 const DRAFT_KEY = 'auditDraftV1';
-const LAST_PEOPLE_KEY = 'auditLastPeopleV1'; // remembers last-used team leader & evaluator
+const LAST_PEOPLE_KEY = 'auditLastPeopleV1'; // remembers last-used team leader
+const EVALUATOR_KEY = 'lockedEvaluatorNameV1'; // the evaluator's own name, set once and locked
+
+let ROSTER = {}; // WIN ID -> { agentName, teamLeader }, loaded from roster.json
+fetch('roster.json')
+  .then(r => r.ok ? r.json() : Promise.reject(new Error('roster.json not found')))
+  .then(data => { ROSTER = data; })
+  .catch(err => console.error('Could not load roster.json — WIN ID auto-fill will be unavailable.', err));
 
 const rowsContainer = document.getElementById('rowsContainer');
 const report = document.getElementById('report');
@@ -163,10 +170,7 @@ function loadDraft() {
 
 function rememberPeople() {
   try {
-    localStorage.setItem(LAST_PEOPLE_KEY, JSON.stringify({
-      teamLeader: val('teamLeader'),
-      evaluator: val('evaluator')
-    }));
+    localStorage.setItem(LAST_PEOPLE_KEY, JSON.stringify({ teamLeader: val('teamLeader') }));
   } catch (e) { /* ignore */ }
 }
 
@@ -179,7 +183,62 @@ function recallPeople() {
   }
 }
 
+/* ---------------- Evaluator name lock ---------------- */
+
+const evaluatorInput = document.getElementById('evaluator');
+const evaluatorLockBtn = document.getElementById('evaluatorLockBtn');
+
+function applyEvaluatorLockState() {
+  const saved = localStorage.getItem(EVALUATOR_KEY);
+  if (saved) {
+    evaluatorInput.value = saved;
+    evaluatorInput.readOnly = true;
+    evaluatorLockBtn.textContent = 'Edit';
+  } else {
+    evaluatorInput.readOnly = false;
+    evaluatorLockBtn.textContent = 'Lock';
+  }
+}
+
+evaluatorLockBtn.addEventListener('click', () => {
+  if (evaluatorInput.readOnly) {
+    // Unlock for editing.
+    evaluatorInput.readOnly = false;
+    evaluatorLockBtn.textContent = 'Lock';
+    evaluatorInput.focus();
+  } else {
+    // Lock in whatever's typed.
+    const name = evaluatorInput.value.trim();
+    if (!name) {
+      setStatus('Type your name before locking it', 'err');
+      return;
+    }
+    localStorage.setItem(EVALUATOR_KEY, name);
+    evaluatorInput.readOnly = true;
+    evaluatorLockBtn.textContent = 'Edit';
+    setStatus('Evaluator name locked', 'ok');
+    render();
+    saveDraft();
+  }
+});
+
 headerFields.forEach(id => document.getElementById(id).addEventListener('input', () => { render(); saveDraft(); }));
+
+// Typing a WIN ID and clicking/tabbing away auto-fills Agent name & Team leader from the roster.
+document.getElementById('winId').addEventListener('blur', () => {
+  const id = val('winId').trim();
+  if (!id) return;
+  const entry = ROSTER[id];
+  if (entry) {
+    document.getElementById('agentName').value = entry.agentName || '';
+    document.getElementById('teamLeader').value = entry.teamLeader || '';
+    render();
+    saveDraft();
+    setStatus('Agent & team leader auto-filled from roster', 'ok');
+  } else {
+    setStatus('WIN ID not found in roster — enter agent details manually', 'err');
+  }
+});
 
 // Enter moves to the next field instead of doing nothing, so a full row of details
 // can be filled in without reaching for the mouse or hitting Tab repeatedly.
@@ -215,7 +274,10 @@ function collectFormData() {
 }
 
 function applyFormData(data) {
-  headerFields.forEach(id => { document.getElementById(id).value = (id in data) ? (data[id] || '') : ''; });
+  headerFields.forEach(id => {
+    if (id === 'evaluator') return; // evaluator stays locked to the current user, independent of loaded data
+    document.getElementById(id).value = (id in data) ? (data[id] || '') : '';
+  });
   rows = Array.isArray(data.rows) && data.rows.length ? JSON.parse(JSON.stringify(data.rows)) : [blankRow()];
   renderRowEditors();
   render();
@@ -230,7 +292,6 @@ function renderRowEditors() {
     const paramEntries = paramEntriesFor(row.category);
     const paramOptions = paramEntries.map(e => e.parameter);
     const constraintOptions = constraintsFor(row.category, row.parameter);
-    const hint = descriptionFor(row.category, row.parameter);
 
     const constraintFieldHtml = constraintOptions.length
       ? `<select data-idx="${i}" data-key="constraint" class="row-select">${optionsHtml(constraintOptions, row.constraint, '-- Select constraint --')}</select>`
@@ -249,7 +310,6 @@ function renderRowEditors() {
         <div class="field">
           <label>Parameter</label>
           <select data-idx="${i}" data-key="parameter" class="row-select" ${row.category ? '' : 'disabled'}>${optionsHtml(paramOptions, row.parameter, '-- Select parameter --')}</select>
-          ${hint ? `<p class="param-hint">${escapeHtml(hint)}</p>` : ''}
         </div>
         <div class="field"><label>Constraint</label>${constraintFieldHtml}</div>
       </div>
@@ -328,12 +388,11 @@ document.getElementById('newBtn').addEventListener('click', () => {
     hdrWin: '', winId: '', ani: '', agentName: '', caseId: '',
     teamLeader: remembered.teamLeader || '',
     interactionDate: '',
-    evaluator: remembered.evaluator || '',
     evalDate: '',
     rows: [blankRow()]
   });
   saveDraft();
-  setStatus(remembered.teamLeader || remembered.evaluator ? 'Started a blank audit (team leader & evaluator carried over)' : 'Started a blank audit', 'ok');
+  setStatus(remembered.teamLeader ? 'Started a blank audit (team leader carried over)' : 'Started a blank audit', 'ok');
 });
 
 document.getElementById('duplicateCurrentBtn').addEventListener('click', () => {
@@ -683,9 +742,14 @@ if (existingDraft) {
   currentAuditId = existingDraft.currentAuditId || null;
   rows = Array.isArray(existingDraft.rows) && existingDraft.rows.length ? existingDraft.rows : [blankRow()];
   renderRowEditors();
-  headerFields.forEach(id => { if (id in existingDraft) document.getElementById(id).value = existingDraft[id] || ''; });
+  headerFields.forEach(id => {
+    if (id === 'evaluator') return; // handled by applyEvaluatorLockState below
+    if (id in existingDraft) document.getElementById(id).value = existingDraft[id] || '';
+  });
+  applyEvaluatorLockState();
   render();
 } else {
   renderRowEditors();
+  applyEvaluatorLockState();
   render();
 }
