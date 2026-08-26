@@ -382,6 +382,11 @@ document.getElementById('addRowBtn').addEventListener('click', () => {
   saveDraft();
 });
 
+function todayFormatted() {
+  const d = new Date();
+  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+}
+
 document.getElementById('newBtn').addEventListener('click', () => {
   currentAuditId = null;
   const remembered = recallPeople() || {};
@@ -389,7 +394,7 @@ document.getElementById('newBtn').addEventListener('click', () => {
     hdrWin: '', winId: '', ani: '', agentName: '', caseId: '',
     teamLeader: remembered.teamLeader || '',
     interactionDate: '',
-    evalDate: '',
+    evalDate: todayFormatted(),
     rows: [blankRow()]
   });
   saveDraft();
@@ -786,5 +791,6 @@ if (existingDraft) {
 } else {
   renderRowEditors();
   applyEvaluatorLockState();
+  document.getElementById('evalDate').value = todayFormatted();
   render();
 }
