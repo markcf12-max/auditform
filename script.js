@@ -141,6 +141,7 @@ fetch('roster.json')
 const rowsContainer = document.getElementById('rowsContainer');
 const report = document.getElementById('report');
 const savedListEl = document.getElementById('savedList');
+const savedListWrapper = savedListEl.parentElement;
 const statusMsg = document.getElementById('statusMsg');
 const searchInput = document.getElementById('searchAudits');
 
@@ -598,6 +599,17 @@ function renderSavedListFromDocs(docs) {
   const term = (searchInput.value || '').trim().toLowerCase();
   const filtered = docs.filter(d => matchesSearch(d.data(), term));
 
+  const unsentCount = docs.filter(d => !d.data().emailSent).length;
+  savedListWrapper.querySelector('.unsent-banner')?.remove();
+  if (unsentCount > 0) {
+    const banner = document.createElement('p');
+    banner.className = 'unsent-banner';
+    banner.textContent = unsentCount === 1
+      ? '⚠ 1 audit has not been marked as emailed yet'
+      : `⚠ ${unsentCount} audits have not been marked as emailed yet`;
+    savedListWrapper.insertBefore(banner, savedListEl);
+  }
+
   if (!filtered.length) {
     savedListEl.innerHTML = docs.length
       ? '<p class="empty-note">No saved audits match that search.</p>'
@@ -608,15 +620,20 @@ function renderSavedListFromDocs(docs) {
   savedListEl.innerHTML = '';
   filtered.forEach(d => {
     const data = d.data();
+    const sent = !!data.emailSent;
     const item = document.createElement('div');
     item.className = 'saved-item';
     const savedAt = data.savedAt && data.savedAt.toDate ? data.savedAt.toDate().toLocaleString() : '';
     item.innerHTML = `
       <div class="meta-text">
-        <div class="win">WIN ${escapeHtml(data.winId || '—')} · ${escapeHtml(data.agentName || 'Unnamed agent')}</div>
+        <div class="win">
+          WIN ${escapeHtml(data.winId || '—')} · ${escapeHtml(data.agentName || 'Unnamed agent')}
+          <span class="badge ${sent ? 'badge-sent' : 'badge-unsent'}">${sent ? '✓ Emailed' : '✉ Not emailed'}</span>
+        </div>
         <div class="sub">Case ${escapeHtml(data.caseId || '—')} · saved ${escapeHtml(savedAt)}</div>
       </div>
       <div class="saved-actions">
+        <button class="btn" type="button" data-toggle-sent="${d.id}" data-sent="${sent}">${sent ? 'Mark not emailed' : 'Mark emailed'}</button>
         <button class="btn" type="button" data-load="${d.id}">Load</button>
         <button class="btn" type="button" data-duplicate="${d.id}">Duplicate</button>
         <button class="btn btn-danger" type="button" data-delete="${d.id}">Delete</button>
@@ -634,6 +651,23 @@ function renderSavedListFromDocs(docs) {
   savedListEl.querySelectorAll('[data-delete]').forEach(btn => {
     btn.addEventListener('click', () => deleteAudit(btn.getAttribute('data-delete')));
   });
+  savedListEl.querySelectorAll('[data-toggle-sent]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-toggle-sent');
+      const currentlySent = btn.getAttribute('data-sent') === 'true';
+      toggleEmailSent(id, currentlySent);
+    });
+  });
+}
+
+async function toggleEmailSent(id, currentlySent) {
+  try {
+    await updateDoc(doc(db, 'audits', id), { emailSent: !currentlySent });
+    setStatus(currentlySent ? 'Marked as not emailed' : 'Marked as emailed', 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus('Could not update email status', 'err');
+  }
 }
 
 searchInput.addEventListener('input', () => renderSavedListFromDocs(latestDocs));
@@ -722,6 +756,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     if (currentAuditId) {
       await updateDoc(doc(db, 'audits', currentAuditId), data);
     } else {
+      data.emailSent = false; // new audits always start as not-yet-sent
       const ref = await addDoc(auditsCol, data);
       currentAuditId = ref.id;
     }
