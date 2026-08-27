@@ -16,14 +16,9 @@
       <h1>QA audit report app</h1>
       <p class="sub">Connected to Firestore — audits save to your database and sync live across every tab you open this in.</p>
     </div>
-  </div>
-
-  <div class="panel no-print">
-    <div class="panel-head">
-      <h2>Saved audits</h2>
-      <input id="searchAudits" class="search-input" type="search" placeholder="Search by WIN ID, agent, or case #">
-    </div>
-    <div id="savedList" class="saved-list"><p class="empty-note">Connecting to Firestore…</p></div>
+    <button class="btn" id="openSavedAuditsBtn" type="button">
+      Saved audits <span id="unsentBadge" class="badge-count" style="display:none;"></span>
+    </button>
   </div>
 
   <div class="panel no-print">
@@ -66,6 +61,17 @@
     <span id="statusMsg" class="status"></span>
   </div>
 
+</div>
+
+<div class="modal-overlay no-print" id="savedAuditsModal" style="display:none;">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Saved audits</h2>
+      <button class="btn btn-tiny" id="closeSavedAuditsBtn" type="button">✕ Close</button>
+    </div>
+    <input id="searchAudits" class="search-input" type="search" placeholder="Search by WIN ID, agent, or case #">
+    <div id="savedList" class="saved-list"><p class="empty-note">Connecting to Firestore…</p></div>
+  </div>
 </div>
 
 <script type="module" src="script.js"></script>
