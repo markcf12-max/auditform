@@ -142,6 +142,27 @@ const rowsContainer = document.getElementById('rowsContainer');
 const report = document.getElementById('report');
 const savedListEl = document.getElementById('savedList');
 const savedListWrapper = savedListEl.parentElement;
+const savedAuditsModal = document.getElementById('savedAuditsModal');
+const openSavedAuditsBtn = document.getElementById('openSavedAuditsBtn');
+const closeSavedAuditsBtn = document.getElementById('closeSavedAuditsBtn');
+const unsentBadge = document.getElementById('unsentBadge');
+
+function openSavedAuditsModal() {
+  savedAuditsModal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeSavedAuditsModal() {
+  savedAuditsModal.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+openSavedAuditsBtn.addEventListener('click', openSavedAuditsModal);
+closeSavedAuditsBtn.addEventListener('click', closeSavedAuditsModal);
+savedAuditsModal.addEventListener('click', e => { if (e.target === savedAuditsModal) closeSavedAuditsModal(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && savedAuditsModal.style.display === 'flex') closeSavedAuditsModal();
+});
 const statusMsg = document.getElementById('statusMsg');
 const searchInput = document.getElementById('searchAudits');
 
@@ -484,7 +505,7 @@ function buildInlineStyledReport() {
   const greenCellStyle = cellStyle + 'background-color:#c6e0b4;font-weight:700;';
   const yellowHeaderStyle = cellStyle + 'background-color:#ffe699;font-weight:700;text-align:center;';
   const boldCellStyle = cellStyle + 'font-weight:700;';
-  const categoryCellStyle = cellStyle + 'font-weight:700;text-align:center;';
+  const categoryCellStyle = cellStyle + 'font-weight:700;text-align:center;vertical-align:middle;';
   const parameterCellStyle = cellStyle + 'text-align:center;text-transform:uppercase;';
   const constraintCellStyle = cellStyle + 'text-align:center;';
   const tableAttrs = 'border="1" cellpadding="8" cellspacing="0" bordercolor="#8c8c8c"';
@@ -674,6 +695,13 @@ function renderSavedListFromDocs(docs) {
     savedListWrapper.insertBefore(banner, savedListEl);
   }
 
+  if (unsentCount > 0) {
+    unsentBadge.textContent = unsentCount;
+    unsentBadge.style.display = 'inline-block';
+  } else {
+    unsentBadge.style.display = 'none';
+  }
+
   if (!filtered.length) {
     savedListEl.innerHTML = docs.length
       ? '<p class="empty-note">No saved audits match that search.</p>'
@@ -762,6 +790,7 @@ async function loadAudit(id) {
     currentAuditId = id;
     applyFormData(snap.data());
     saveDraft();
+    closeSavedAuditsModal();
     setStatus('Loaded', 'ok');
   } catch (e) {
     console.error(e);
@@ -782,6 +811,7 @@ async function duplicateAudit(id) {
     currentAuditId = null;
     applyFormData(snap.data());
     saveDraft();
+    closeSavedAuditsModal();
     setStatus('Duplicated as a new draft — edit and Save', 'ok');
   } catch (e) {
     console.error(e);
