@@ -846,10 +846,15 @@ if (existingDraft) {
     if (id in existingDraft) document.getElementById(id).value = existingDraft[id] || '';
   });
   applyEvaluatorLockState();
-  render();
 } else {
   renderRowEditors();
   applyEvaluatorLockState();
-  document.getElementById('evalDate').value = todayFormatted();
-  render();
 }
+
+// Evaluation date defaults to today whenever it's blank — whether this is a brand-new
+// session or a restored draft that never had a date filled in.
+if (!val('evalDate')) {
+  document.getElementById('evalDate').value = todayFormatted();
+  saveDraft();
+}
+render();
