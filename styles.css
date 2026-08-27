@@ -114,6 +114,12 @@ h1{font-size:22px;font-weight:700;margin:0 0 4px;letter-spacing:-.01em;}
 .btn-tiny{padding:0 12px;font-size:11.5px;flex-shrink:0;}
 .field input[readonly]{background:#eef0f2;color:#555;cursor:not-allowed;border-color:var(--card-border);}
 .field input[readonly]:focus{box-shadow:none;border-color:var(--card-border);}
+.btn-link{
+  background:none;border:none;padding:5px 0 0;margin:0;
+  color:var(--accent);font-size:11.5px;font-weight:600;
+  cursor:pointer;text-decoration:underline;text-align:left;font-family:inherit;
+}
+.btn-link:hover{color:var(--accent-hover);}
 
 .row-item{
   border:1px solid var(--card-border);border-radius:var(--radius-sm);
