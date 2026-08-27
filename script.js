@@ -440,23 +440,73 @@ document.getElementById('copyBtn').addEventListener('click', async () => {
 // and several of them also ignore CSS-only borders/backgrounds on tables unless the same
 // thing is also set as an old HTML attribute (border=, bgcolor=). We set both so the
 // formatting survives across the widest range of paste destinations.
+// Finds runs of consecutive findings that share the same (non-blank) category, so the
+// category cell can be rendered once with a rowspan instead of repeating on every row.
+// Returns an array the same length as rowsArr: a positive number = "render this row's
+// category cell with this rowspan", 0 = "skip the category cell, it's covered above".
+function computeCategorySpans(rowsArr) {
+  const spans = new Array(rowsArr.length).fill(0);
+  let i = 0;
+  while (i < rowsArr.length) {
+    let j = i;
+    while (rowsArr[i].category && j + 1 < rowsArr.length && rowsArr[j + 1].category === rowsArr[i].category) {
+      j++;
+    }
+    spans[i] = j - i + 1;
+    i = j + 1;
+  }
+  return spans;
+}
+
+// Returns the original array indices reordered so every row sharing a category sits
+// together, even if they weren't added consecutively. Groups appear in the order their
+// category first shows up; a blank category never merges with another blank one. The
+// Findings editor below the preview is unaffected — this only changes how the preview
+// and copied report are laid out.
+function groupedOrderByCategory(rowsArr) {
+  const groupKeys = [];
+  const groups = {};
+  rowsArr.forEach((r, idx) => {
+    const key = r.category ? r.category : `__blank_${idx}`;
+    if (!(key in groups)) {
+      groups[key] = [];
+      groupKeys.push(key);
+    }
+    groups[key].push(idx);
+  });
+  const order = [];
+  groupKeys.forEach(key => order.push(...groups[key]));
+  return order;
+}
+
 function buildInlineStyledReport() {
   const cellStyle = 'border:1px solid #8c8c8c;padding:8px 10px;vertical-align:top;font-size:13px;font-family:Calibri,Arial,sans-serif;';
   const greenCellStyle = cellStyle + 'background-color:#c6e0b4;font-weight:700;';
   const yellowHeaderStyle = cellStyle + 'background-color:#ffe699;font-weight:700;text-align:center;';
   const boldCellStyle = cellStyle + 'font-weight:700;';
+  const categoryCellStyle = cellStyle + 'font-weight:700;text-align:center;';
+  const parameterCellStyle = cellStyle + 'text-align:center;text-transform:uppercase;';
+  const constraintCellStyle = cellStyle + 'text-align:center;';
   const tableAttrs = 'border="1" cellpadding="8" cellspacing="0" bordercolor="#8c8c8c"';
   const tableStyle = 'border-collapse:collapse;border:1px solid #8c8c8c;width:100%;margin-top:14px;';
   const pStyle = 'margin:0 0 10px;line-height:1.5;font-family:Calibri,Arial,sans-serif;font-size:13.5px;color:#000;';
 
-  const bodyRows = rows.map(r => `
+  const order = groupedOrderByCategory(rows);
+  const orderedRows = order.map(idx => rows[idx]);
+  const categorySpans = computeCategorySpans(orderedRows);
+  const bodyRows = orderedRows.map((r, k) => {
+    const categoryCell = categorySpans[k] > 0
+      ? `<td ${tableAttrs} style="${categoryCellStyle}"${categorySpans[k] > 1 ? ` rowspan="${categorySpans[k]}"` : ''}>${escapeHtml(r.category)}</td>`
+      : '';
+    return `
     <tr>
-      <td ${tableAttrs} style="${boldCellStyle}">${escapeHtml(r.category)}</td>
-      <td ${tableAttrs} style="${cellStyle}">${escapeHtml(r.parameter)}</td>
-      <td ${tableAttrs} style="${cellStyle}">${escapeHtml(r.constraint)}</td>
+      ${categoryCell}
+      <td ${tableAttrs} style="${parameterCellStyle}">${escapeHtml(r.parameter)}</td>
+      <td ${tableAttrs} style="${constraintCellStyle}">${escapeHtml(r.constraint)}</td>
       <td ${tableAttrs} style="${cellStyle}">${escapeHtml(r.remark)}</td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
   return `
     <p style="${pStyle}">Hi @${escapeHtml(val('agentName'))},</p>
@@ -510,14 +560,23 @@ function buildInlineStyledReport() {
 }
 
 function render() {
-  const bodyRows = rows.map((r, i) => `
+  const order = groupedOrderByCategory(rows);
+  const orderedRows = order.map(idx => rows[idx]);
+  const categorySpans = computeCategorySpans(orderedRows);
+  const bodyRows = orderedRows.map((r, k) => {
+    const originalIdx = order[k]; // edits must still write back to the real position in `rows`
+    const categoryCell = categorySpans[k] > 0
+      ? `<td class="category-cell"${categorySpans[k] > 1 ? ` rowspan="${categorySpans[k]}"` : ''}>${escapeHtml(r.category)}</td>`
+      : '';
+    return `
     <tr>
-      <td class="editable-cell" contenteditable="true" data-idx="${i}" data-key="category">${escapeHtml(r.category)}</td>
-      <td class="editable-cell" contenteditable="true" data-idx="${i}" data-key="parameter">${escapeHtml(r.parameter)}</td>
-      <td class="editable-cell" contenteditable="true" data-idx="${i}" data-key="constraint">${escapeHtml(r.constraint)}</td>
-      <td class="editable-cell" contenteditable="true" data-idx="${i}" data-key="remark">${escapeHtml(r.remark)}</td>
+      ${categoryCell}
+      <td class="editable-cell" contenteditable="true" data-idx="${originalIdx}" data-key="parameter">${escapeHtml(r.parameter)}</td>
+      <td class="editable-cell" contenteditable="true" data-idx="${originalIdx}" data-key="constraint">${escapeHtml(r.constraint)}</td>
+      <td class="editable-cell" contenteditable="true" data-idx="${originalIdx}" data-key="remark">${escapeHtml(r.remark)}</td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
   report.innerHTML = `
     <p>Hi @${escapeHtml(val('agentName'))},</p>
