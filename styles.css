@@ -175,10 +175,11 @@ table.meta td:first-child{background:var(--green);font-weight:700;width:16%;}
 table.meta td:nth-child(2){width:34%;}
 table.meta td:nth-child(3){background:var(--green);font-weight:700;width:16%;}
 table.body th{background:var(--yellow);font-weight:700;text-align:center;}
-table.body td:nth-child(1){font-weight:600;width:14%;}
-table.body td:nth-child(2){width:26%;}
-table.body td:nth-child(3){width:20%;}
+table.body td:nth-child(1){font-weight:600;width:14%;text-align:center;vertical-align:middle;}
+table.body td:nth-child(2){width:26%;text-align:center;text-transform:uppercase;}
+table.body td:nth-child(3){width:20%;text-align:center;}
 table.body td:nth-child(4){width:40%;}
+.category-cell{cursor:default;}
 
 .editable-cell{cursor:text;transition:background-color .12s;}
 .editable-cell:hover{background-color:#eff6ff;}
