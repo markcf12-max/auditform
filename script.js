@@ -465,12 +465,21 @@ document.getElementById('copyBtn').addEventListener('click', async () => {
 // category cell can be rendered once with a rowspan instead of repeating on every row.
 // Returns an array the same length as rowsArr: a positive number = "render this row's
 // category cell with this rowspan", 0 = "skip the category cell, it's covered above".
-function computeCategorySpans(rowsArr) {
-  const spans = new Array(rowsArr.length).fill(0);
+// Computes rowspans for one column of an already-ordered row list: a positive number
+// means "render this row's cell with this rowspan," 0 means "skip it, a cell above
+// covers it." requireMatchKeys lets a column only merge when other columns (e.g.
+// category) also match, so Parameter never merges across two different Categories.
+function computeSpans(orderedRowsArr, keyName, requireMatchKeys = []) {
+  const spans = new Array(orderedRowsArr.length).fill(0);
   let i = 0;
-  while (i < rowsArr.length) {
+  while (i < orderedRowsArr.length) {
     let j = i;
-    while (rowsArr[i].category && j + 1 < rowsArr.length && rowsArr[j + 1].category === rowsArr[i].category) {
+    while (
+      orderedRowsArr[i][keyName] &&
+      j + 1 < orderedRowsArr.length &&
+      orderedRowsArr[j + 1][keyName] === orderedRowsArr[i][keyName] &&
+      requireMatchKeys.every(k => orderedRowsArr[j + 1][k] === orderedRowsArr[i][k])
+    ) {
       j++;
     }
     spans[i] = j - i + 1;
@@ -479,24 +488,33 @@ function computeCategorySpans(rowsArr) {
   return spans;
 }
 
-// Returns the original array indices reordered so every row sharing a category sits
-// together, even if they weren't added consecutively. Groups appear in the order their
-// category first shows up; a blank category never merges with another blank one. The
-// Findings editor below the preview is unaffected — this only changes how the preview
-// and copied report are laid out.
+// Returns the original array indices reordered so every row sharing a Category sits
+// together, and within each Category, rows sharing a Parameter sit together too — even
+// if they weren't added consecutively. Groups appear in the order they were first seen;
+// a blank category/parameter never merges with another blank one. The Findings editor
+// below the preview is unaffected — this only changes how the preview and copied report
+// are laid out.
 function groupedOrderByCategory(rowsArr) {
-  const groupKeys = [];
-  const groups = {};
+  const catKeys = [];
+  const catGroups = {};
   rowsArr.forEach((r, idx) => {
-    const key = r.category ? r.category : `__blank_${idx}`;
-    if (!(key in groups)) {
-      groups[key] = [];
-      groupKeys.push(key);
-    }
-    groups[key].push(idx);
+    const key = r.category ? r.category : `__blank_cat_${idx}`;
+    if (!(key in catGroups)) { catGroups[key] = []; catKeys.push(key); }
+    catGroups[key].push(idx);
   });
+
   const order = [];
-  groupKeys.forEach(key => order.push(...groups[key]));
+  catKeys.forEach(catKey => {
+    const indices = catGroups[catKey];
+    const paramKeys = [];
+    const paramGroups = {};
+    indices.forEach(idx => {
+      const pKey = rowsArr[idx].parameter ? rowsArr[idx].parameter : `__blank_param_${idx}`;
+      if (!(pKey in paramGroups)) { paramGroups[pKey] = []; paramKeys.push(pKey); }
+      paramGroups[pKey].push(idx);
+    });
+    paramKeys.forEach(pKey => order.push(...paramGroups[pKey]));
+  });
   return order;
 }
 
@@ -506,7 +524,7 @@ function buildInlineStyledReport() {
   const yellowHeaderStyle = cellStyle + 'background-color:#ffe699;font-weight:700;text-align:center;';
   const boldCellStyle = cellStyle + 'font-weight:700;';
   const categoryCellStyle = cellStyle + 'font-weight:700;text-align:center;vertical-align:middle;';
-  const parameterCellStyle = cellStyle + 'text-align:center;text-transform:uppercase;';
+  const parameterCellStyle = cellStyle + 'text-align:center;text-transform:uppercase;vertical-align:middle;';
   const constraintCellStyle = cellStyle + 'text-align:center;';
   const tableAttrs = 'border="1" cellpadding="8" cellspacing="0" bordercolor="#8c8c8c"';
   const tableStyle = 'border-collapse:collapse;border:1px solid #8c8c8c;width:100%;margin-top:14px;';
@@ -514,15 +532,19 @@ function buildInlineStyledReport() {
 
   const order = groupedOrderByCategory(rows);
   const orderedRows = order.map(idx => rows[idx]);
-  const categorySpans = computeCategorySpans(orderedRows);
+  const categorySpans = computeSpans(orderedRows, 'category');
+  const parameterSpans = computeSpans(orderedRows, 'parameter', ['category']);
   const bodyRows = orderedRows.map((r, k) => {
     const categoryCell = categorySpans[k] > 0
       ? `<td ${tableAttrs} style="${categoryCellStyle}"${categorySpans[k] > 1 ? ` rowspan="${categorySpans[k]}"` : ''}>${escapeHtml(r.category)}</td>`
       : '';
+    const parameterCell = parameterSpans[k] > 0
+      ? `<td ${tableAttrs} style="${parameterCellStyle}"${parameterSpans[k] > 1 ? ` rowspan="${parameterSpans[k]}"` : ''}>${escapeHtml(r.parameter)}</td>`
+      : '';
     return `
     <tr>
       ${categoryCell}
-      <td ${tableAttrs} style="${parameterCellStyle}">${escapeHtml(r.parameter)}</td>
+      ${parameterCell}
       <td ${tableAttrs} style="${constraintCellStyle}">${escapeHtml(r.constraint)}</td>
       <td ${tableAttrs} style="${cellStyle}">${escapeHtml(r.remark)}</td>
     </tr>
@@ -583,18 +605,22 @@ function buildInlineStyledReport() {
 function render() {
   const order = groupedOrderByCategory(rows);
   const orderedRows = order.map(idx => rows[idx]);
-  const categorySpans = computeCategorySpans(orderedRows);
+  const categorySpans = computeSpans(orderedRows, 'category');
+  const parameterSpans = computeSpans(orderedRows, 'parameter', ['category']);
   const bodyRows = orderedRows.map((r, k) => {
     const originalIdx = order[k]; // edits must still write back to the real position in `rows`
     const categoryCell = categorySpans[k] > 0
-      ? `<td class="category-cell"${categorySpans[k] > 1 ? ` rowspan="${categorySpans[k]}"` : ''}>${escapeHtml(r.category)}</td>`
+      ? `<td class="cell-category static-cell"${categorySpans[k] > 1 ? ` rowspan="${categorySpans[k]}"` : ''}>${escapeHtml(r.category)}</td>`
+      : '';
+    const parameterCell = parameterSpans[k] > 0
+      ? `<td class="cell-parameter static-cell"${parameterSpans[k] > 1 ? ` rowspan="${parameterSpans[k]}"` : ''}>${escapeHtml(r.parameter)}</td>`
       : '';
     return `
     <tr>
       ${categoryCell}
-      <td class="editable-cell" contenteditable="true" data-idx="${originalIdx}" data-key="parameter">${escapeHtml(r.parameter)}</td>
-      <td class="editable-cell" contenteditable="true" data-idx="${originalIdx}" data-key="constraint">${escapeHtml(r.constraint)}</td>
-      <td class="editable-cell" contenteditable="true" data-idx="${originalIdx}" data-key="remark">${escapeHtml(r.remark)}</td>
+      ${parameterCell}
+      <td class="cell-constraint editable-cell" contenteditable="true" data-idx="${originalIdx}" data-key="constraint">${escapeHtml(r.constraint)}</td>
+      <td class="cell-remark editable-cell" contenteditable="true" data-idx="${originalIdx}" data-key="remark">${escapeHtml(r.remark)}</td>
     </tr>
   `;
   }).join('');
