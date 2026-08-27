@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 import {
   getFirestore, collection, doc, addDoc, updateDoc, deleteDoc,
-  getDoc, onSnapshot, query, orderBy, serverTimestamp
+  getDoc, onSnapshot, query, orderBy, serverTimestamp, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -241,6 +241,40 @@ evaluatorLockBtn.addEventListener('click', () => {
     setStatus('Evaluator name locked', 'ok');
     render();
     saveDraft();
+  }
+});
+
+// Retroactively pushes the current evaluator name onto every saved audit in Firestore,
+// not just new ones going forward. Firestore batches cap at 500 writes, so large
+// collections are split into chunks and committed one at a time.
+document.getElementById('applyEvaluatorAllBtn').addEventListener('click', async () => {
+  const name = val('evaluator').trim();
+  if (!name) {
+    setStatus('Type and lock a name first', 'err');
+    return;
+  }
+  if (!latestDocs.length) {
+    setStatus('No saved audits to update', 'err');
+    return;
+  }
+  const count = latestDocs.length;
+  if (!confirm(`Update the evaluator name to "${name}" on all ${count} saved audit${count === 1 ? '' : 's'}? This cannot be undone.`)) {
+    return;
+  }
+
+  setStatus(`Updating ${count} saved audits…`);
+  try {
+    const chunkSize = 450;
+    for (let i = 0; i < latestDocs.length; i += chunkSize) {
+      const chunk = latestDocs.slice(i, i + chunkSize);
+      const batch = writeBatch(db);
+      chunk.forEach(d => batch.update(doc(db, 'audits', d.id), { evaluator: name }));
+      await batch.commit();
+    }
+    setStatus(`Updated evaluator name on ${count} saved audits`, 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus('Failed to update all audits — try again', 'err');
   }
 });
 
