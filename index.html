@@ -16,9 +16,21 @@
       <h1>QA audit report app</h1>
       <p class="sub">Connected to Firestore — audits save to your database and sync live across every tab you open this in.</p>
     </div>
-    <button class="btn" id="openSavedAuditsBtn" type="button">
-      Saved audits <span id="unsentBadge" class="badge-count" style="display:none;"></span>
-    </button>
+    <div class="topbar-actions">
+      <button class="btn" id="togglePipBtn" type="button">Floating preview</button>
+      <button class="btn" id="openSavedAuditsBtn" type="button">
+        Saved audits <span id="unsentBadge" class="badge-count" style="display:none;"></span>
+      </button>
+    </div>
+  </div>
+
+  <div class="panel no-print">
+    <div class="panel-head"><h2>QA form link</h2></div>
+    <p class="field-note">Set this once to the URL of your separate QA audit form. "Open QA form" in the action bar will jump straight there.</p>
+    <div class="locked-field">
+      <input id="qaFormLink" placeholder="https://forms.office.com/... or your QA tool's URL">
+      <button type="button" id="qaFormLinkLockBtn" class="btn btn-tiny">Lock</button>
+    </div>
   </div>
 
   <div class="panel no-print">
@@ -59,6 +71,7 @@
     <button class="btn" id="newBtn" type="button">Start new (blank)</button>
     <button class="btn" id="copyBtn" type="button">Copy report</button>
     <button class="btn" id="printBtn" type="button">Print / Save as PDF</button>
+    <button class="btn" id="openQaFormBtn" type="button">Open QA form ↗</button>
     <span id="statusMsg" class="status"></span>
   </div>
 
@@ -73,6 +86,17 @@
     <input id="searchAudits" class="search-input" type="search" placeholder="Search by WIN ID, agent, or case #">
     <div id="savedList" class="saved-list"><p class="empty-note">Connecting to Firestore…</p></div>
   </div>
+</div>
+
+<div class="pip-window no-print" id="pipWindow" style="display:none;">
+  <div class="pip-header" id="pipHeader">
+    <span>Preview</span>
+    <div class="pip-header-actions">
+      <button type="button" id="pipMinimizeBtn" class="pip-btn" title="Minimize">–</button>
+      <button type="button" id="pipCloseBtn" class="pip-btn" title="Close">✕</button>
+    </div>
+  </div>
+  <div class="pip-content" id="pipContent"></div>
 </div>
 
 <script type="module" src="script.js"></script>
