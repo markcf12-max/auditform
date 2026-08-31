@@ -92,7 +92,7 @@ h1{font-size:22px;font-weight:700;margin:0 0 4px;letter-spacing:-.01em;}
 .pip-content table.audit{width:100%;border-collapse:collapse;margin-top:6px;font-size:11.5px;}
 .pip-content table.audit td, .pip-content table.audit th{border:1px solid var(--border);padding:6px 8px;}
 .pip-window.minimized .pip-content{display:none;}
-.pip-window.minimized{width:260px;}
+.pip-window.minimized{width:260px;height:auto !important;min-height:0;resize:none;}
 
 @media (max-width:600px){
   .pip-window{left:12px;right:12px;width:auto;bottom:12px;}
