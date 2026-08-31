@@ -131,6 +131,7 @@ let latestDocs = []; // last snapshot from Firestore, kept for client-side searc
 const DRAFT_KEY = 'auditDraftV1';
 const LAST_PEOPLE_KEY = 'auditLastPeopleV1'; // remembers last-used team leader
 const EVALUATOR_KEY = 'lockedEvaluatorNameV1'; // the evaluator's own name, set once and locked
+const QA_FORM_LINK_KEY = 'qaFormLinkV1'; // URL of the separate QA audit form/tool
 
 let ROSTER = {}; // WIN ID -> { agentName, teamLeader }, loaded from roster.json
 fetch('roster.json')
@@ -276,6 +277,108 @@ document.getElementById('applyEvaluatorAllBtn').addEventListener('click', async 
     console.error(e);
     setStatus('Failed to update all audits — try again', 'err');
   }
+});
+
+/* ---------------- QA form link ---------------- */
+
+const qaFormLinkInput = document.getElementById('qaFormLink');
+const qaFormLinkLockBtn = document.getElementById('qaFormLinkLockBtn');
+
+function applyQaFormLinkState() {
+  const saved = localStorage.getItem(QA_FORM_LINK_KEY);
+  if (saved) {
+    qaFormLinkInput.value = saved;
+    qaFormLinkInput.readOnly = true;
+    qaFormLinkLockBtn.textContent = 'Edit';
+  } else {
+    qaFormLinkInput.readOnly = false;
+    qaFormLinkLockBtn.textContent = 'Lock';
+  }
+}
+
+qaFormLinkLockBtn.addEventListener('click', () => {
+  if (qaFormLinkInput.readOnly) {
+    qaFormLinkInput.readOnly = false;
+    qaFormLinkLockBtn.textContent = 'Lock';
+    qaFormLinkInput.focus();
+  } else {
+    const link = qaFormLinkInput.value.trim();
+    if (!link) {
+      setStatus('Paste your QA form link before locking it', 'err');
+      return;
+    }
+    localStorage.setItem(QA_FORM_LINK_KEY, link);
+    qaFormLinkInput.readOnly = true;
+    qaFormLinkLockBtn.textContent = 'Edit';
+    setStatus('QA form link locked', 'ok');
+  }
+});
+
+document.getElementById('openQaFormBtn').addEventListener('click', () => {
+  const link = localStorage.getItem(QA_FORM_LINK_KEY);
+  if (!link) {
+    setStatus('Set your QA form link above first', 'err');
+    return;
+  }
+  window.open(link, '_blank', 'noopener');
+});
+
+applyQaFormLinkState();
+
+/* ---------------- Floating preview (picture-in-picture) ---------------- */
+
+const pipWindow = document.getElementById('pipWindow');
+const pipHeader = document.getElementById('pipHeader');
+const pipContent = document.getElementById('pipContent');
+const pipMinimizeBtn = document.getElementById('pipMinimizeBtn');
+const pipCloseBtn = document.getElementById('pipCloseBtn');
+const togglePipBtn = document.getElementById('togglePipBtn');
+
+function syncPipContent() {
+  if (pipWindow.style.display === 'none') return;
+  pipContent.innerHTML = report.innerHTML;
+  // The floating window is a read-only mirror — editing still happens in the main preview/form.
+  pipContent.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
+}
+
+function openPip() {
+  pipWindow.style.display = 'flex';
+  syncPipContent();
+}
+
+function closePip() {
+  pipWindow.style.display = 'none';
+}
+
+togglePipBtn.addEventListener('click', () => {
+  if (pipWindow.style.display === 'none') openPip(); else closePip();
+});
+pipCloseBtn.addEventListener('click', closePip);
+pipMinimizeBtn.addEventListener('click', () => {
+  pipWindow.classList.toggle('minimized');
+  pipMinimizeBtn.textContent = pipWindow.classList.contains('minimized') ? '□' : '–';
+});
+
+// Drag-to-move by the header, like a real picture-in-picture window.
+let pipDragging = false, pipOffsetX = 0, pipOffsetY = 0;
+pipHeader.addEventListener('mousedown', e => {
+  if (e.target.closest('.pip-btn')) return;
+  pipDragging = true;
+  const rect = pipWindow.getBoundingClientRect();
+  pipOffsetX = e.clientX - rect.left;
+  pipOffsetY = e.clientY - rect.top;
+  document.body.style.userSelect = 'none';
+});
+document.addEventListener('mousemove', e => {
+  if (!pipDragging) return;
+  pipWindow.style.left = `${e.clientX - pipOffsetX}px`;
+  pipWindow.style.top = `${e.clientY - pipOffsetY}px`;
+  pipWindow.style.right = 'auto';
+  pipWindow.style.bottom = 'auto';
+});
+document.addEventListener('mouseup', () => {
+  pipDragging = false;
+  document.body.style.userSelect = '';
 });
 
 headerFields.forEach(id => document.getElementById(id).addEventListener('input', () => { render(); saveDraft(); }));
@@ -685,6 +788,7 @@ function render() {
   `;
 
   attachPreviewEditHandlers();
+  syncPipContent();
 }
 
 // Lets people edit values directly in the preview table, not just the form above.
@@ -745,18 +849,21 @@ function renderSavedListFromDocs(docs) {
   const filtered = docs.filter(d => matchesSearch(d.data(), term));
 
   const unsentCount = docs.filter(d => !d.data().emailSent).length;
+  const unloggedCount = docs.filter(d => !d.data().loggedInQA).length;
   savedListWrapper.querySelector('.unsent-banner')?.remove();
-  if (unsentCount > 0) {
+  if (unsentCount > 0 || unloggedCount > 0) {
+    const parts = [];
+    if (unsentCount > 0) parts.push(unsentCount === 1 ? '1 audit not emailed' : `${unsentCount} audits not emailed`);
+    if (unloggedCount > 0) parts.push(unloggedCount === 1 ? '1 audit not logged in the QA form' : `${unloggedCount} audits not logged in the QA form`);
     const banner = document.createElement('p');
     banner.className = 'unsent-banner';
-    banner.textContent = unsentCount === 1
-      ? '⚠ 1 audit has not been marked as emailed yet'
-      : `⚠ ${unsentCount} audits have not been marked as emailed yet`;
+    banner.textContent = `⚠ ${parts.join(' · ')}`;
     savedListWrapper.insertBefore(banner, savedListEl);
   }
 
-  if (unsentCount > 0) {
-    unsentBadge.textContent = unsentCount;
+  const badgeTotal = unsentCount + unloggedCount;
+  if (badgeTotal > 0) {
+    unsentBadge.textContent = badgeTotal;
     unsentBadge.style.display = 'inline-block';
   } else {
     unsentBadge.style.display = 'none';
@@ -773,6 +880,7 @@ function renderSavedListFromDocs(docs) {
   filtered.forEach(d => {
     const data = d.data();
     const sent = !!data.emailSent;
+    const logged = !!data.loggedInQA;
     const item = document.createElement('div');
     item.className = 'saved-item';
     const savedAt = data.savedAt && data.savedAt.toDate ? data.savedAt.toDate().toLocaleString() : '';
@@ -781,11 +889,13 @@ function renderSavedListFromDocs(docs) {
         <div class="win">
           WIN ${escapeHtml(data.winId || '—')} · ${escapeHtml(data.agentName || 'Unnamed agent')}
           <span class="badge ${sent ? 'badge-sent' : 'badge-unsent'}">${sent ? '✓ Emailed' : '✉ Not emailed'}</span>
+          <span class="badge ${logged ? 'badge-sent' : 'badge-unsent'}">${logged ? '✓ Logged' : '📝 Not logged'}</span>
         </div>
         <div class="sub">Case ${escapeHtml(data.caseId || '—')} · saved ${escapeHtml(savedAt)}</div>
       </div>
       <div class="saved-actions">
         <button class="btn" type="button" data-toggle-sent="${d.id}" data-sent="${sent}">${sent ? 'Mark not emailed' : 'Mark emailed'}</button>
+        <button class="btn" type="button" data-toggle-logged="${d.id}" data-logged="${logged}">${logged ? 'Mark not logged' : 'Mark logged'}</button>
         <button class="btn" type="button" data-load="${d.id}">Load</button>
         <button class="btn" type="button" data-duplicate="${d.id}">Duplicate</button>
         <button class="btn btn-danger" type="button" data-delete="${d.id}">Delete</button>
@@ -810,6 +920,13 @@ function renderSavedListFromDocs(docs) {
       toggleEmailSent(id, currentlySent);
     });
   });
+  savedListEl.querySelectorAll('[data-toggle-logged]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-toggle-logged');
+      const currentlyLogged = btn.getAttribute('data-logged') === 'true';
+      toggleLoggedInQA(id, currentlyLogged);
+    });
+  });
 }
 
 async function toggleEmailSent(id, currentlySent) {
@@ -819,6 +936,16 @@ async function toggleEmailSent(id, currentlySent) {
   } catch (e) {
     console.error(e);
     setStatus('Could not update email status', 'err');
+  }
+}
+
+async function toggleLoggedInQA(id, currentlyLogged) {
+  try {
+    await updateDoc(doc(db, 'audits', id), { loggedInQA: !currentlyLogged });
+    setStatus(currentlyLogged ? 'Marked as not logged' : 'Marked as logged in QA form', 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus('Could not update QA log status', 'err');
   }
 }
 
@@ -851,6 +978,7 @@ async function loadAudit(id) {
     applyFormData(snap.data());
     saveDraft();
     closeSavedAuditsModal();
+    openPip();
     setStatus('Loaded', 'ok');
   } catch (e) {
     console.error(e);
@@ -872,6 +1000,7 @@ async function duplicateAudit(id) {
     applyFormData(snap.data());
     saveDraft();
     closeSavedAuditsModal();
+    openPip();
     setStatus('Duplicated as a new draft — edit and Save', 'ok');
   } catch (e) {
     console.error(e);
@@ -911,6 +1040,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
       await updateDoc(doc(db, 'audits', currentAuditId), data);
     } else {
       data.emailSent = false; // new audits always start as not-yet-sent
+      data.loggedInQA = false; // and not-yet-logged in the separate QA form
       const ref = await addDoc(auditsCol, data);
       currentAuditId = ref.id;
     }
