@@ -330,12 +330,19 @@ applyQaFormLinkState();
 const pipWindow = document.getElementById('pipWindow');
 const pipHeader = document.getElementById('pipHeader');
 const pipContent = document.getElementById('pipContent');
+const pipTitle = document.getElementById('pipTitle');
+const pipLiveBtn = document.getElementById('pipLiveBtn');
 const pipMinimizeBtn = document.getElementById('pipMinimizeBtn');
 const pipCloseBtn = document.getElementById('pipCloseBtn');
 const togglePipBtn = document.getElementById('togglePipBtn');
 
+// When true, the PiP is "pinned" to a specific saved audit (via the Load button) and
+// should NOT be overwritten by whatever's currently in the main form — that's the whole
+// point of viewing a past audit without disturbing what you're actively working on.
+let pipPinned = false;
+
 function syncPipContent() {
-  if (pipWindow.style.display === 'none') return;
+  if (pipWindow.style.display === 'none' || pipPinned) return;
   pipContent.innerHTML = report.innerHTML;
   // The floating window is a read-only mirror — editing still happens in the main preview/form.
   pipContent.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
@@ -348,12 +355,45 @@ function openPip() {
 
 function closePip() {
   pipWindow.style.display = 'none';
+  pipPinned = false;
+  pipLiveBtn.style.display = 'none';
+  pipTitle.textContent = 'Preview';
+}
+
+// Shows a saved audit's report in the floating window as a static, read-only snapshot —
+// separate from whatever's currently in the main form, so nothing you've typed gets lost.
+async function viewAuditInPip(id) {
+  setStatus('Loading preview…');
+  try {
+    const snap = await getDoc(doc(db, 'audits', id));
+    if (!snap.exists()) {
+      setStatus('That audit could not be found', 'err');
+      return;
+    }
+    const data = snap.data();
+    pipPinned = true;
+    pipContent.innerHTML = buildStaticReportHtml(data);
+    pipTitle.textContent = `WIN ${data.winId || '—'} (saved — not your current form)`;
+    pipLiveBtn.style.display = 'inline-flex';
+    pipWindow.style.display = 'flex';
+    closeSavedAuditsModal();
+    setStatus('Viewing saved audit — your current form is untouched', 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus('Failed to load preview', 'err');
+  }
 }
 
 togglePipBtn.addEventListener('click', () => {
   if (pipWindow.style.display === 'none') openPip(); else closePip();
 });
 pipCloseBtn.addEventListener('click', closePip);
+pipLiveBtn.addEventListener('click', () => {
+  pipPinned = false;
+  pipLiveBtn.style.display = 'none';
+  pipTitle.textContent = 'Preview';
+  syncPipContent();
+});
 pipMinimizeBtn.addEventListener('click', () => {
   pipWindow.classList.toggle('minimized');
   pipMinimizeBtn.textContent = pipWindow.classList.contains('minimized') ? '□' : '–';
@@ -655,6 +695,59 @@ function groupedOrderByCategory(rowsArr) {
   return order;
 }
 
+// Renders a saved audit's report from its raw Firestore data — used for the "Load"
+// (view-only) button in the saved-audits list, so viewing an old audit never touches
+// whatever's currently in the live form/rows.
+function buildStaticReportHtml(data) {
+  const rowsForDoc = Array.isArray(data.rows) ? data.rows : [];
+  const order = groupedOrderByCategory(rowsForDoc);
+  const orderedRows = order.map(idx => rowsForDoc[idx]);
+  const categorySpans = computeSpans(orderedRows, 'category');
+  const parameterSpans = computeSpans(orderedRows, 'parameter', ['category']);
+
+  const bodyRows = orderedRows.map((r, k) => {
+    const categoryCell = categorySpans[k] > 0
+      ? `<td class="cell-category static-cell"${categorySpans[k] > 1 ? ` rowspan="${categorySpans[k]}"` : ''}>${escapeHtml(r.category)}</td>`
+      : '';
+    const parameterCell = parameterSpans[k] > 0
+      ? `<td class="cell-parameter static-cell"${parameterSpans[k] > 1 ? ` rowspan="${parameterSpans[k]}"` : ''}>${escapeHtml(r.parameter)}</td>`
+      : '';
+    return `
+      <tr>
+        ${categoryCell}
+        ${parameterCell}
+        <td class="cell-constraint">${escapeHtml(r.constraint)}</td>
+        <td class="cell-remark">${escapeHtml(r.remark)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <p>Hi @${escapeHtml(data.agentName || '')},</p>
+    <p>Please see below your audit ${escapeHtml(data.hdrWin || '')}. We encourage you to review the areas of opportunity highlighted, as these will support continuous improvement. Your acknowledgment will be sincerely appreciated.</p>
+    <p>Hi TL @${escapeHtml(data.teamLeader || '')},</p>
+    <p>Kindly help us coach the agent immediately to avoid the recurrence of the observed opportunity.</p>
+
+    <table class="audit meta" style="margin-top:14px;">
+      <tbody>
+        <tr><td>WIN ID</td><td>${escapeHtml(data.winId || '')}</td><td>ANI/MIN</td><td style="font-weight:700;">${escapeHtml(data.ani || '')}</td></tr>
+        <tr><td>Agent name</td><td>${escapeHtml(data.agentName || '')}</td><td>Call/case ID</td><td>${escapeHtml(data.caseId || '')}</td></tr>
+        <tr><td>Team leader</td><td>${escapeHtml(data.teamLeader || '')}</td><td>Date and time of interaction</td><td>${escapeHtml(data.interactionDate || '')}</td></tr>
+        <tr><td>Evaluator's name</td><td>${escapeHtml(data.evaluator || '')}</td><td>Evaluation date</td><td>${escapeHtml(data.evalDate || '')}</td></tr>
+      </tbody>
+    </table>
+
+    <table class="audit body" style="margin-top:14px;">
+      <thead>
+        <tr><th>Category</th><th>Parameter</th><th>Constraint</th><th>Remark</th></tr>
+      </thead>
+      <tbody>
+        ${bodyRows}
+      </tbody>
+    </table>
+  `;
+}
+
 function buildInlineStyledReport() {
   const cellStyle = 'border:1px solid #8c8c8c;padding:8px 10px;vertical-align:top;font-size:13px;font-family:Calibri,Arial,sans-serif;';
   const greenCellStyle = cellStyle + 'background-color:#c6e0b4;font-weight:700;';
@@ -896,7 +989,8 @@ function renderSavedListFromDocs(docs) {
       <div class="saved-actions">
         <button class="btn" type="button" data-toggle-sent="${d.id}" data-sent="${sent}">${sent ? 'Mark not emailed' : 'Mark emailed'}</button>
         <button class="btn" type="button" data-toggle-logged="${d.id}" data-logged="${logged}">${logged ? 'Mark not logged' : 'Mark logged'}</button>
-        <button class="btn" type="button" data-load="${d.id}">Load</button>
+        <button class="btn" type="button" data-load="${d.id}" title="View without touching your current form">Load</button>
+        <button class="btn" type="button" data-edit="${d.id}" title="Load into the form for editing — replaces what's currently in the form">Edit</button>
         <button class="btn" type="button" data-duplicate="${d.id}">Duplicate</button>
         <button class="btn btn-danger" type="button" data-delete="${d.id}">Delete</button>
       </div>
@@ -905,7 +999,10 @@ function renderSavedListFromDocs(docs) {
   });
 
   savedListEl.querySelectorAll('[data-load]').forEach(btn => {
-    btn.addEventListener('click', () => loadAudit(btn.getAttribute('data-load')));
+    btn.addEventListener('click', () => viewAuditInPip(btn.getAttribute('data-load')));
+  });
+  savedListEl.querySelectorAll('[data-edit]').forEach(btn => {
+    btn.addEventListener('click', () => loadAudit(btn.getAttribute('data-edit')));
   });
   savedListEl.querySelectorAll('[data-duplicate]').forEach(btn => {
     btn.addEventListener('click', () => duplicateAudit(btn.getAttribute('data-duplicate')));
@@ -978,8 +1075,7 @@ async function loadAudit(id) {
     applyFormData(snap.data());
     saveDraft();
     closeSavedAuditsModal();
-    openPip();
-    setStatus('Loaded', 'ok');
+    setStatus('Loaded into the form for editing', 'ok');
   } catch (e) {
     console.error(e);
     setStatus('Failed to load audit', 'err');
@@ -1000,7 +1096,6 @@ async function duplicateAudit(id) {
     applyFormData(snap.data());
     saveDraft();
     closeSavedAuditsModal();
-    openPip();
     setStatus('Duplicated as a new draft — edit and Save', 'ok');
   } catch (e) {
     console.error(e);
