@@ -61,12 +61,15 @@ h1{font-size:22px;font-weight:700;margin:0 0 4px;letter-spacing:-.01em;}
 
 .pip-window{
   position:fixed;bottom:20px;right:20px;
-  width:420px;max-width:calc(100vw - 40px);max-height:70vh;
+  width:420px;height:480px;
+  min-width:300px;min-height:220px;
+  max-width:92vw;max-height:92vh;
+  resize:both;overflow:hidden;
   background:#fff;border-radius:var(--radius);
   box-shadow:0 20px 40px -8px rgba(15,23,42,.35);
   border:1px solid var(--card-border);
   display:flex;flex-direction:column;
-  z-index:1100;overflow:hidden;
+  z-index:1100;
 }
 .pip-header{
   display:flex;align-items:center;justify-content:space-between;
@@ -207,14 +210,14 @@ h1{font-size:22px;font-weight:700;margin:0 0 4px;letter-spacing:-.01em;}
 
 .saved-list{display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto;}
 .saved-item{
-  display:flex;justify-content:space-between;align-items:center;gap:12px;
+  display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;
   border:1px solid var(--card-border);border-radius:var(--radius-sm);
   padding:11px 14px;background:#fafbfc;
   transition:border-color .15s, background .15s;
 }
 .saved-item:hover{border-color:#cbd5e1;background:#fff;}
-.saved-item .meta-text{font-size:13px;min-width:0;}
-.saved-item .meta-text .win{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px;}
+.saved-item .meta-text{font-size:13px;min-width:180px;flex:1 1 220px;}
+.saved-item .meta-text .win{font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .saved-item .meta-text .sub{font-size:12px;color:var(--muted);margin:2px 0 0;}
 .badge{
   font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;
@@ -227,7 +230,7 @@ h1{font-size:22px;font-weight:700;margin:0 0 4px;letter-spacing:-.01em;}
   border:1px solid #fed7aa;border-radius:var(--radius-sm);
   padding:8px 12px;margin:0 0 10px;
 }
-.saved-actions{display:flex;gap:6px;flex-shrink:0;}
+.saved-actions{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;}
 .saved-actions .btn{padding:6px 12px;font-size:12px;}
 .empty-note{font-size:13px;color:var(--muted);padding:8px 2px;}
 
