@@ -148,6 +148,18 @@ const openSavedAuditsBtn = document.getElementById('openSavedAuditsBtn');
 const closeSavedAuditsBtn = document.getElementById('closeSavedAuditsBtn');
 const unsentBadge = document.getElementById('unsentBadge');
 
+const deletedListEl = document.getElementById('deletedList');
+const deletedAuditsModal = document.getElementById('deletedAuditsModal');
+const openDeletedBtn = document.getElementById('openDeletedBtn');
+const closeDeletedModalBtn = document.getElementById('closeDeletedModalBtn');
+const deletedBadge = document.getElementById('deletedBadge');
+
+const archivedListEl = document.getElementById('archivedList');
+const archivedAuditsModal = document.getElementById('archivedAuditsModal');
+const openArchivedBtn = document.getElementById('openArchivedBtn');
+const closeArchivedModalBtn = document.getElementById('closeArchivedModalBtn');
+const archivedBadge = document.getElementById('archivedBadge');
+
 function openSavedAuditsModal() {
   savedAuditsModal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
@@ -158,11 +170,43 @@ function closeSavedAuditsModal() {
   document.body.style.overflow = '';
 }
 
+function openDeletedModal() {
+  deletedAuditsModal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDeletedModal() {
+  deletedAuditsModal.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function openArchivedModal() {
+  archivedAuditsModal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeArchivedModal() {
+  archivedAuditsModal.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
 openSavedAuditsBtn.addEventListener('click', openSavedAuditsModal);
 closeSavedAuditsBtn.addEventListener('click', closeSavedAuditsModal);
 savedAuditsModal.addEventListener('click', e => { if (e.target === savedAuditsModal) closeSavedAuditsModal(); });
+
+openDeletedBtn.addEventListener('click', openDeletedModal);
+closeDeletedModalBtn.addEventListener('click', closeDeletedModal);
+deletedAuditsModal.addEventListener('click', e => { if (e.target === deletedAuditsModal) closeDeletedModal(); });
+
+openArchivedBtn.addEventListener('click', openArchivedModal);
+closeArchivedModalBtn.addEventListener('click', closeArchivedModal);
+archivedAuditsModal.addEventListener('click', e => { if (e.target === archivedAuditsModal) closeArchivedModal(); });
+
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && savedAuditsModal.style.display === 'flex') closeSavedAuditsModal();
+  if (e.key !== 'Escape') return;
+  if (savedAuditsModal.style.display === 'flex') closeSavedAuditsModal();
+  if (deletedAuditsModal.style.display === 'flex') closeDeletedModal();
+  if (archivedAuditsModal.style.display === 'flex') closeArchivedModal();
 });
 const statusMsg = document.getElementById('statusMsg');
 const searchInput = document.getElementById('searchAudits');
@@ -254,11 +298,12 @@ document.getElementById('applyEvaluatorAllBtn').addEventListener('click', async 
     setStatus('Type and lock a name first', 'err');
     return;
   }
-  if (!latestDocs.length) {
+  const activeDocs = latestDocs.filter(d => !d.data().deleted);
+  if (!activeDocs.length) {
     setStatus('No saved audits to update', 'err');
     return;
   }
-  const count = latestDocs.length;
+  const count = activeDocs.length;
   if (!confirm(`Update the evaluator name to "${name}" on all ${count} saved audit${count === 1 ? '' : 's'}? This cannot be undone.`)) {
     return;
   }
@@ -266,8 +311,8 @@ document.getElementById('applyEvaluatorAllBtn').addEventListener('click', async 
   setStatus(`Updating ${count} saved audits…`);
   try {
     const chunkSize = 450;
-    for (let i = 0; i < latestDocs.length; i += chunkSize) {
-      const chunk = latestDocs.slice(i, i + chunkSize);
+    for (let i = 0; i < activeDocs.length; i += chunkSize) {
+      const chunk = activeDocs.slice(i, i + chunkSize);
       const batch = writeBatch(db);
       chunk.forEach(d => batch.update(doc(db, 'audits', d.id), { evaluator: name }));
       await batch.commit();
@@ -938,11 +983,12 @@ function matchesSearch(data, term) {
 }
 
 function renderSavedListFromDocs(docs) {
+  const activeDocs = docs.filter(d => !d.data().deleted && !d.data().archived);
   const term = (searchInput.value || '').trim().toLowerCase();
-  const filtered = docs.filter(d => matchesSearch(d.data(), term));
+  const filtered = activeDocs.filter(d => matchesSearch(d.data(), term));
 
-  const unsentCount = docs.filter(d => !d.data().emailSent).length;
-  const unloggedCount = docs.filter(d => !d.data().loggedInQA).length;
+  const unsentCount = activeDocs.filter(d => !d.data().emailSent).length;
+  const unloggedCount = activeDocs.filter(d => !d.data().loggedInQA).length;
   savedListWrapper.querySelector('.unsent-banner')?.remove();
   if (unsentCount > 0 || unloggedCount > 0) {
     const parts = [];
@@ -963,7 +1009,7 @@ function renderSavedListFromDocs(docs) {
   }
 
   if (!filtered.length) {
-    savedListEl.innerHTML = docs.length
+    savedListEl.innerHTML = activeDocs.length
       ? '<p class="empty-note">No saved audits match that search.</p>'
       : '<p class="empty-note">No saved audits yet. Fill in the form below and click "Save audit".</p>';
     return;
@@ -1046,6 +1092,148 @@ async function toggleLoggedInQA(id, currentlyLogged) {
   }
 }
 
+function renderDeletedListFromDocs(docs) {
+  const deleted = docs.filter(d => d.data().deleted);
+
+  deletedBadge.textContent = deleted.length;
+  deletedBadge.style.display = deleted.length > 0 ? 'inline-block' : 'none';
+
+  if (!deleted.length) {
+    deletedListEl.innerHTML = '<p class="empty-note">Nothing here — anything you delete shows up in this list until you permanently remove it.</p>';
+    return;
+  }
+
+  deletedListEl.innerHTML = '';
+  deleted.forEach(d => {
+    const data = d.data();
+    const item = document.createElement('div');
+    item.className = 'saved-item';
+    const deletedAt = data.deletedAt && data.deletedAt.toDate ? data.deletedAt.toDate().toLocaleString() : '';
+    item.innerHTML = `
+      <div class="meta-text">
+        <div class="win">WIN ${escapeHtml(data.winId || '—')} · ${escapeHtml(data.agentName || 'Unnamed agent')}</div>
+        <div class="sub">Case ${escapeHtml(data.caseId || '—')} · deleted ${escapeHtml(deletedAt)}</div>
+      </div>
+      <div class="saved-actions">
+        <button class="btn" type="button" data-restore="${d.id}">Restore</button>
+        <button class="btn btn-danger" type="button" data-perm-delete="${d.id}">Delete permanently</button>
+      </div>
+    `;
+    deletedListEl.appendChild(item);
+  });
+
+  deletedListEl.querySelectorAll('[data-restore]').forEach(btn => {
+    btn.addEventListener('click', () => restoreAudit(btn.getAttribute('data-restore')));
+  });
+  deletedListEl.querySelectorAll('[data-perm-delete]').forEach(btn => {
+    btn.addEventListener('click', () => permanentlyDeleteAudit(btn.getAttribute('data-perm-delete')));
+  });
+}
+
+async function restoreAudit(id) {
+  setStatus('Restoring…');
+  try {
+    await updateDoc(doc(db, 'audits', id), { deleted: false, deletedAt: null });
+    setStatus('Restored to saved audits', 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus('Failed to restore audit', 'err');
+  }
+}
+
+async function permanentlyDeleteAudit(id) {
+  if (!confirm('Permanently delete this audit? This cannot be undone.')) return;
+  setStatus('Permanently deleting…');
+  try {
+    await deleteDoc(doc(db, 'audits', id));
+    setStatus('Permanently deleted', 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus('Failed to permanently delete', 'err');
+  }
+}
+
+function renderArchivedListFromDocs(docs) {
+  const archived = docs.filter(d => d.data().archived && !d.data().deleted);
+
+  archivedBadge.textContent = archived.length;
+  archivedBadge.style.display = archived.length > 0 ? 'inline-block' : 'none';
+
+  if (!archived.length) {
+    archivedListEl.innerHTML = '<p class="empty-note">Nothing archived yet. Use "Archive all" in Saved audits to tuck away everything currently in your active list.</p>';
+    return;
+  }
+
+  archivedListEl.innerHTML = '';
+  archived.forEach(d => {
+    const data = d.data();
+    const item = document.createElement('div');
+    item.className = 'saved-item';
+    const archivedAt = data.archivedAt && data.archivedAt.toDate ? data.archivedAt.toDate().toLocaleString() : '';
+    item.innerHTML = `
+      <div class="meta-text">
+        <div class="win">WIN ${escapeHtml(data.winId || '—')} · ${escapeHtml(data.agentName || 'Unnamed agent')}</div>
+        <div class="sub">Case ${escapeHtml(data.caseId || '—')} · archived ${escapeHtml(archivedAt)}</div>
+      </div>
+      <div class="saved-actions">
+        <button class="btn" type="button" data-view-archived="${d.id}">Load</button>
+        <button class="btn" type="button" data-unarchive="${d.id}">Unarchive</button>
+        <button class="btn btn-danger" type="button" data-delete-archived="${d.id}">Delete</button>
+      </div>
+    `;
+    archivedListEl.appendChild(item);
+  });
+
+  archivedListEl.querySelectorAll('[data-view-archived]').forEach(btn => {
+    btn.addEventListener('click', () => viewAuditInPip(btn.getAttribute('data-view-archived')));
+  });
+  archivedListEl.querySelectorAll('[data-unarchive]').forEach(btn => {
+    btn.addEventListener('click', () => unarchiveAudit(btn.getAttribute('data-unarchive')));
+  });
+  archivedListEl.querySelectorAll('[data-delete-archived]').forEach(btn => {
+    btn.addEventListener('click', () => deleteAudit(btn.getAttribute('data-delete-archived')));
+  });
+}
+
+async function unarchiveAudit(id) {
+  setStatus('Restoring to saved audits…');
+  try {
+    await updateDoc(doc(db, 'audits', id), { archived: false, archivedAt: null });
+    setStatus('Moved back to saved audits', 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus('Failed to unarchive audit', 'err');
+  }
+}
+
+// Bulk-moves every currently active (non-deleted, non-archived) audit into storage.
+document.getElementById('archiveAllBtn').addEventListener('click', async () => {
+  const activeDocs = latestDocs.filter(d => !d.data().deleted && !d.data().archived);
+  if (!activeDocs.length) {
+    setStatus('No saved audits to archive', 'err');
+    return;
+  }
+  const count = activeDocs.length;
+  if (!confirm(`Archive all ${count} saved audit${count === 1 ? '' : 's'}? They'll move out of this list into Archived, and you can restore any of them anytime.`)) {
+    return;
+  }
+
+  setStatus(`Archiving ${count} audits…`);
+  try {
+    const chunkSize = 450;
+    for (let i = 0; i < activeDocs.length; i += chunkSize) {
+      const chunk = activeDocs.slice(i, i + chunkSize);
+      const batch = writeBatch(db);
+      chunk.forEach(d => batch.update(doc(db, 'audits', d.id), { archived: true, archivedAt: serverTimestamp() }));
+      await batch.commit();
+    }
+    setStatus(`Archived ${count} audits`, 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus('Failed to archive all — try again', 'err');
+  }
+});
+
 searchInput.addEventListener('input', () => renderSavedListFromDocs(latestDocs));
 
 // Live sync: any save/delete (from this tab or another) updates the list automatically.
@@ -1054,6 +1242,8 @@ try {
   onSnapshot(q, snapshot => {
     latestDocs = snapshot.docs;
     renderSavedListFromDocs(latestDocs);
+    renderDeletedListFromDocs(latestDocs);
+    renderArchivedListFromDocs(latestDocs);
   }, err => {
     console.error(err);
     savedListEl.innerHTML = '<p class="empty-note">Could not connect to Firestore. Check your config and security rules.</p>';
@@ -1104,12 +1294,12 @@ async function duplicateAudit(id) {
 }
 
 async function deleteAudit(id) {
-  if (!confirm('Delete this saved audit? This cannot be undone.')) return;
+  if (!confirm('Move this audit to Deleted? You can restore it from the Deleted list later.')) return;
   setStatus('Deleting…');
   try {
-    await deleteDoc(doc(db, 'audits', id));
+    await updateDoc(doc(db, 'audits', id), { deleted: true, deletedAt: serverTimestamp() });
     if (currentAuditId === id) currentAuditId = null;
-    setStatus('Deleted', 'ok');
+    setStatus('Moved to Deleted', 'ok');
   } catch (e) {
     console.error(e);
     setStatus('Failed to delete audit', 'err');
