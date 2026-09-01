@@ -1164,24 +1164,74 @@ function renderArchivedListFromDocs(docs) {
     return;
   }
 
-  archivedListEl.innerHTML = '';
+  // Group by the calendar day each audit was archived, so the list reads as a set of
+  // collapsible day-folders instead of one long scroll of individual cards.
+  const groups = {};
+  const groupMeta = [];
   archived.forEach(d => {
     const data = d.data();
-    const item = document.createElement('div');
-    item.className = 'saved-item';
-    const archivedAt = data.archivedAt && data.archivedAt.toDate ? data.archivedAt.toDate().toLocaleString() : '';
-    item.innerHTML = `
-      <div class="meta-text">
-        <div class="win">WIN ${escapeHtml(data.winId || '—')} · ${escapeHtml(data.agentName || 'Unnamed agent')}</div>
-        <div class="sub">Case ${escapeHtml(data.caseId || '—')} · archived ${escapeHtml(archivedAt)}</div>
-      </div>
-      <div class="saved-actions">
-        <button class="btn" type="button" data-view-archived="${d.id}">Load</button>
-        <button class="btn" type="button" data-unarchive="${d.id}">Unarchive</button>
-        <button class="btn btn-danger" type="button" data-delete-archived="${d.id}">Delete</button>
-      </div>
+    const dateObj = data.archivedAt && data.archivedAt.toDate ? data.archivedAt.toDate() : null;
+    const label = dateObj
+      ? dateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+      : 'Unknown date';
+    if (!(label in groups)) {
+      groups[label] = [];
+      groupMeta.push({ label, sortKey: dateObj ? dateObj.getTime() : 0 });
+    }
+    groups[label].push(d);
+  });
+  groupMeta.sort((a, b) => b.sortKey - a.sortKey); // most recent day first
+
+  archivedListEl.innerHTML = '';
+  groupMeta.forEach((g, idx) => {
+    const groupDocs = groups[g.label];
+    const folderId = `archiveFolder${idx}`;
+    const expanded = idx === 0; // only the most recent day opens automatically
+
+    const folder = document.createElement('div');
+    folder.className = 'archive-folder';
+    folder.innerHTML = `
+      <button type="button" class="folder-header" data-folder-toggle="${folderId}">
+        <span class="folder-icon">📁</span>
+        <span class="folder-label">${escapeHtml(g.label)}</span>
+        <span class="folder-count">${groupDocs.length}</span>
+        <span class="folder-chevron">${expanded ? '▾' : '▸'}</span>
+      </button>
+      <div class="folder-items" id="${folderId}" style="display:${expanded ? 'flex' : 'none'};"></div>
     `;
-    archivedListEl.appendChild(item);
+    archivedListEl.appendChild(folder);
+
+    const itemsContainer = folder.querySelector('.folder-items');
+    groupDocs.forEach(d => {
+      const data = d.data();
+      const timeLabel = data.archivedAt && data.archivedAt.toDate
+        ? data.archivedAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : '';
+      const item = document.createElement('div');
+      item.className = 'saved-item';
+      item.innerHTML = `
+        <div class="meta-text">
+          <div class="win">WIN ${escapeHtml(data.winId || '—')} · ${escapeHtml(data.agentName || 'Unnamed agent')}</div>
+          <div class="sub">Case ${escapeHtml(data.caseId || '—')} · archived ${escapeHtml(timeLabel)}</div>
+        </div>
+        <div class="saved-actions">
+          <button class="btn" type="button" data-view-archived="${d.id}">Load</button>
+          <button class="btn" type="button" data-unarchive="${d.id}">Unarchive</button>
+          <button class="btn btn-danger" type="button" data-delete-archived="${d.id}">Delete</button>
+        </div>
+      `;
+      itemsContainer.appendChild(item);
+    });
+  });
+
+  archivedListEl.querySelectorAll('[data-folder-toggle]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.getAttribute('data-folder-toggle'));
+      const chevron = btn.querySelector('.folder-chevron');
+      const isOpen = target.style.display !== 'none';
+      target.style.display = isOpen ? 'none' : 'flex';
+      chevron.textContent = isOpen ? '▸' : '▾';
+    });
   });
 
   archivedListEl.querySelectorAll('[data-view-archived]').forEach(btn => {
