@@ -21,6 +21,12 @@
       <button class="btn" id="openSavedAuditsBtn" type="button">
         Saved audits <span id="unsentBadge" class="badge-count" style="display:none;"></span>
       </button>
+      <button class="btn" id="openDeletedBtn" type="button">
+        Deleted <span id="deletedBadge" class="badge-count badge-count-muted" style="display:none;"></span>
+      </button>
+      <button class="btn" id="openArchivedBtn" type="button">
+        Archived <span id="archivedBadge" class="badge-count badge-count-archive" style="display:none;"></span>
+      </button>
     </div>
   </div>
 
@@ -83,8 +89,33 @@
       <h2>Saved audits</h2>
       <button class="btn btn-tiny" id="closeSavedAuditsBtn" type="button">✕ Close</button>
     </div>
-    <input id="searchAudits" class="search-input" type="search" placeholder="Search by WIN ID, agent, or case #">
+    <div class="search-row">
+      <input id="searchAudits" class="search-input" type="search" placeholder="Search by WIN ID, agent, or case #">
+      <button class="btn btn-tiny" id="archiveAllBtn" type="button">Archive all ↓</button>
+    </div>
     <div id="savedList" class="saved-list"><p class="empty-note">Connecting to Firestore…</p></div>
+  </div>
+</div>
+
+<div class="modal-overlay no-print" id="deletedAuditsModal" style="display:none;">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Deleted audits</h2>
+      <button class="btn btn-tiny" id="closeDeletedModalBtn" type="button">✕ Close</button>
+    </div>
+    <p class="field-note">Deleted audits stay here until you permanently remove them — nothing is lost by accident.</p>
+    <div id="deletedList" class="saved-list"><p class="empty-note">Connecting to Firestore…</p></div>
+  </div>
+</div>
+
+<div class="modal-overlay no-print" id="archivedAuditsModal" style="display:none;">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Archived audits</h2>
+      <button class="btn btn-tiny" id="closeArchivedModalBtn" type="button">✕ Close</button>
+    </div>
+    <p class="field-note">Archived audits are tucked away out of your main list, but never deleted — restore any of them back anytime.</p>
+    <div id="archivedList" class="saved-list"><p class="empty-note">Connecting to Firestore…</p></div>
   </div>
 </div>
 
