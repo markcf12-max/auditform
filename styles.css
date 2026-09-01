@@ -42,6 +42,8 @@ h1{font-size:22px;font-weight:700;margin:0 0 4px;letter-spacing:-.01em;}
   background:#dc2626;color:#fff;border-radius:999px;
   font-size:10.5px;font-weight:700;padding:1px 7px;margin-left:6px;
 }
+.badge-count-muted{background:#64748b;}
+.badge-count-archive{background:var(--accent);}
 
 .modal-overlay{
   position:fixed;inset:0;background:rgba(15,23,42,.55);
@@ -133,10 +135,11 @@ h1{font-size:22px;font-weight:700;margin:0 0 4px;letter-spacing:-.01em;}
 .search-input{
   font-family:inherit;font-size:13px;padding:8px 12px;
   border:1px solid var(--card-border);border-radius:999px;
-  min-width:220px;background:#f8fafc;
+  min-width:220px;background:#f8fafc;flex:1;
   transition:border-color .15s, box-shadow .15s;
 }
 .search-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);background:#fff;}
+.search-row{display:flex;gap:8px;align-items:center;}
 
 .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;}
 .field{display:flex;flex-direction:column;gap:5px;}
