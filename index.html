@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.20.0/xlsx.full.min.js"></script>
 </head>
 <body>
 <div class="app">
@@ -37,6 +38,16 @@
       <input id="qaFormLink" placeholder="https://forms.office.com/... or your QA tool's URL">
       <button type="button" id="qaFormLinkLockBtn" class="btn btn-tiny">Lock</button>
     </div>
+  </div>
+
+  <div class="panel no-print">
+    <div class="panel-head"><h2>Roster</h2></div>
+    <p class="field-note" id="rosterStatus">Loading roster…</p>
+    <div class="actions-bar" style="margin-top:2px;">
+      <button class="btn" id="uploadRosterBtn" type="button">Upload updated roster (.xlsx/.csv)</button>
+      <button class="btn" id="syncTeamLeadersBtn" type="button">Sync team leaders on all saved audits</button>
+    </div>
+    <input type="file" id="rosterFileInput" accept=".xlsx,.xls,.csv" style="display:none;">
   </div>
 
   <div class="panel no-print">
