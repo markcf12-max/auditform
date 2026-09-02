@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 import {
-  getFirestore, collection, doc, addDoc, updateDoc, deleteDoc,
+  getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, setDoc,
   getDoc, onSnapshot, query, orderBy, serverTimestamp, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 
@@ -132,12 +132,57 @@ const DRAFT_KEY = 'auditDraftV1';
 const LAST_PEOPLE_KEY = 'auditLastPeopleV1'; // remembers last-used team leader
 const EVALUATOR_KEY = 'lockedEvaluatorNameV1'; // the evaluator's own name, set once and locked
 const QA_FORM_LINK_KEY = 'qaFormLinkV1'; // URL of the separate QA audit form/tool
+const rosterDocRef = doc(db, 'meta', 'roster');
 
-let ROSTER = {}; // WIN ID -> { agentName, teamLeader }, loaded from roster.json
-fetch('roster.json')
-  .then(r => r.ok ? r.json() : Promise.reject(new Error('roster.json not found')))
-  .then(data => { ROSTER = data; })
-  .catch(err => console.error('Could not load roster.json — WIN ID auto-fill will be unavailable.', err));
+let ROSTER = {}; // WIN ID -> { agentName, teamLeader }
+
+function loadRosterFallbackFile() {
+  fetch('roster.json')
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('roster.json not found')))
+    .then(data => {
+      ROSTER = data;
+      updateRosterStatus(Object.keys(data).length, null, true);
+    })
+    .catch(err => {
+      console.error('Could not load roster.json — WIN ID auto-fill will be unavailable.', err);
+      updateRosterStatus(0, null, true);
+    });
+}
+
+function updateRosterStatus(count, updatedAt, isFallbackFile) {
+  const el = document.getElementById('rosterStatus');
+  if (!el) return;
+  if (!count) {
+    el.textContent = 'No roster loaded — upload one below to enable WIN ID auto-fill.';
+    return;
+  }
+  const when = updatedAt ? ` · updated ${updatedAt.toLocaleString()}` : '';
+  el.textContent = isFallbackFile
+    ? `${count} agents loaded (bundled roster file)${when}`
+    : `${count} agents loaded${when}`;
+}
+
+// Roster lives in Firestore once someone uploads one via the button below, so future
+// updates never require redeploying files — every tab picks it up live. Until then,
+// fall back to the roster.json bundled with the site.
+try {
+  onSnapshot(rosterDocRef, snap => {
+    if (snap.exists() && snap.data().entries) {
+      const data = snap.data();
+      ROSTER = data.entries;
+      const updatedAt = data.updatedAt && data.updatedAt.toDate ? data.updatedAt.toDate() : null;
+      updateRosterStatus(Object.keys(data.entries).length, updatedAt, false);
+    } else {
+      loadRosterFallbackFile();
+    }
+  }, err => {
+    console.error('Could not subscribe to roster doc, falling back to roster.json', err);
+    loadRosterFallbackFile();
+  });
+} catch (e) {
+  console.error(e);
+  loadRosterFallbackFile();
+}
 
 const rowsContainer = document.getElementById('rowsContainer');
 const report = document.getElementById('report');
@@ -369,6 +414,124 @@ document.getElementById('openQaFormBtn').addEventListener('click', () => {
 });
 
 applyQaFormLinkState();
+
+/* ---------------- Roster upload & sync ---------------- */
+
+// Parses an uploaded .xlsx/.xls/.csv into { winId: { agentName, teamLeader } }.
+// Looks across every sheet for one with the expected column headers, so the file
+// doesn't have to be named or structured in any particular way beyond having those
+// three columns somewhere.
+function parseRosterFile(file) {
+  return new Promise((resolve, reject) => {
+    if (!window.XLSX) {
+      reject(new Error('Spreadsheet library did not load'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        let rows = null;
+        for (const sheetName of workbook.SheetNames) {
+          const json = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+          if (json.length && 'Win ID' in json[0] && 'Employee Name' in json[0] && 'Supervisor Name' in json[0]) {
+            rows = json;
+            break;
+          }
+        }
+        if (!rows) {
+          reject(new Error('Could not find a sheet with "Win ID", "Employee Name", and "Supervisor Name" columns'));
+          return;
+        }
+        const roster = {};
+        rows.forEach(row => {
+          const winId = String(row['Win ID']).trim();
+          if (!winId) return;
+          roster[winId] = {
+            agentName: String(row['Employee Name'] || '').trim(),
+            teamLeader: String(row['Supervisor Name'] || '').trim()
+          };
+        });
+        resolve(roster);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error('Could not read the file'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+document.getElementById('uploadRosterBtn').addEventListener('click', () => {
+  document.getElementById('rosterFileInput').click();
+});
+
+document.getElementById('rosterFileInput').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  setStatus('Reading roster file…');
+  try {
+    const parsedRoster = await parseRosterFile(file);
+    const count = Object.keys(parsedRoster).length;
+    if (!count) {
+      setStatus('No valid rows found in that file', 'err');
+      return;
+    }
+    if (!confirm(`Found ${count} agents in this file. Replace the current roster with it?`)) {
+      return;
+    }
+    setStatus('Uploading roster…');
+    await setDoc(rosterDocRef, { entries: parsedRoster, updatedAt: serverTimestamp(), count });
+    setStatus(`Roster updated — ${count} agents loaded`, 'ok');
+  } catch (err) {
+    console.error(err);
+    setStatus(err.message || 'Failed to upload roster', 'err');
+  } finally {
+    e.target.value = '';
+  }
+});
+
+// Applies the current roster's team leader to every non-deleted saved audit whose
+// WIN ID matches and whose stored team leader is out of date.
+document.getElementById('syncTeamLeadersBtn').addEventListener('click', async () => {
+  if (!Object.keys(ROSTER).length) {
+    setStatus('Roster not loaded yet', 'err');
+    return;
+  }
+  const candidates = latestDocs.filter(d => !d.data().deleted);
+  const updates = [];
+  candidates.forEach(d => {
+    const data = d.data();
+    const entry = ROSTER[data.winId];
+    if (entry && entry.teamLeader && entry.teamLeader !== data.teamLeader) {
+      updates.push({ id: d.id, teamLeader: entry.teamLeader });
+    }
+  });
+
+  if (!updates.length) {
+    setStatus('Every saved audit already matches the roster', 'ok');
+    return;
+  }
+  if (!confirm(`Update team leader on ${updates.length} saved audit${updates.length === 1 ? '' : 's'} to match the roster? This cannot be undone.`)) {
+    return;
+  }
+
+  setStatus(`Updating ${updates.length} audits…`);
+  try {
+    const chunkSize = 450;
+    for (let i = 0; i < updates.length; i += chunkSize) {
+      const chunk = updates.slice(i, i + chunkSize);
+      const batch = writeBatch(db);
+      chunk.forEach(u => batch.update(doc(db, 'audits', u.id), { teamLeader: u.teamLeader }));
+      await batch.commit();
+    }
+    setStatus(`Updated team leader on ${updates.length} audits`, 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus('Failed to sync team leaders — try again', 'err');
+  }
+});
 
 /* ---------------- Floating preview (picture-in-picture) ---------------- */
 
