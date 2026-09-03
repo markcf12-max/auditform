@@ -964,6 +964,7 @@ function buildInlineStyledReport() {
   const categoryCellStyle = cellStyle + 'font-weight:700;text-align:center;vertical-align:middle;';
   const parameterCellStyle = cellStyle + 'text-align:center;text-transform:uppercase;vertical-align:middle;';
   const constraintCellStyle = cellStyle + 'text-align:center;';
+  const remarkCellStyle = cellStyle + 'white-space:pre-wrap;';
   const tableAttrs = 'border="1" cellpadding="8" cellspacing="0" bordercolor="#8c8c8c"';
   const tableStyle = 'border-collapse:collapse;border:1px solid #8c8c8c;width:100%;margin-top:14px;';
   const pStyle = 'margin:0 0 10px;line-height:1.5;font-family:Calibri,Arial,sans-serif;font-size:13.5px;color:#000;';
@@ -984,7 +985,7 @@ function buildInlineStyledReport() {
       ${categoryCell}
       ${parameterCell}
       <td ${tableAttrs} style="${constraintCellStyle}">${escapeHtml(r.constraint)}</td>
-      <td ${tableAttrs} style="${cellStyle}">${escapeHtml(r.remark)}</td>
+      <td ${tableAttrs} style="${remarkCellStyle}">${escapeHtml(r.remark)}</td>
     </tr>
   `;
   }).join('');
