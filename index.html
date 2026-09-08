@@ -69,6 +69,13 @@
         <button type="button" id="applyEvaluatorAllBtn" class="btn-link">Apply this name to all saved audits</button>
       </div>
       <div class="field"><label>Evaluation date</label><input id="evalDate"></div>
+      <div class="field">
+        <label>Subject line prefix <span class="hint">(e.g. Smart ES | PL Audit)</span></label>
+        <div class="locked-field">
+          <input id="subjectPrefix" placeholder="Smart ES | PL Audit">
+          <button type="button" id="subjectPrefixLockBtn" class="btn btn-tiny">Lock</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -87,6 +94,7 @@
     <button class="btn" id="duplicateCurrentBtn" type="button">Duplicate as new</button>
     <button class="btn" id="newBtn" type="button">Start new (blank)</button>
     <button class="btn" id="copyBtn" type="button">Copy report</button>
+    <button class="btn" id="copySubjectBtn" type="button">Copy subject</button>
     <button class="btn" id="printBtn" type="button">Print / Save as PDF</button>
     <button class="btn" id="openQaFormBtn" type="button">Open QA form ↗</button>
     <span id="statusMsg" class="status"></span>
