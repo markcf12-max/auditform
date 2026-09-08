@@ -132,6 +132,7 @@ const DRAFT_KEY = 'auditDraftV1';
 const LAST_PEOPLE_KEY = 'auditLastPeopleV1'; // remembers last-used team leader
 const EVALUATOR_KEY = 'lockedEvaluatorNameV1'; // the evaluator's own name, set once and locked
 const QA_FORM_LINK_KEY = 'qaFormLinkV1'; // URL of the separate QA audit form/tool
+const SUBJECT_PREFIX_KEY = 'subjectPrefixV1'; // e.g. "Smart ES | PL Audit"
 const rosterDocRef = doc(db, 'meta', 'roster');
 
 let ROSTER = {}; // WIN ID -> { agentName, teamLeader }
@@ -414,6 +415,69 @@ document.getElementById('openQaFormBtn').addEventListener('click', () => {
 });
 
 applyQaFormLinkState();
+
+/* ---------------- Subject line ---------------- */
+
+const subjectPrefixInput = document.getElementById('subjectPrefix');
+const subjectPrefixLockBtn = document.getElementById('subjectPrefixLockBtn');
+
+function applySubjectPrefixState() {
+  const saved = localStorage.getItem(SUBJECT_PREFIX_KEY);
+  if (saved) {
+    subjectPrefixInput.value = saved;
+    subjectPrefixInput.readOnly = true;
+    subjectPrefixLockBtn.textContent = 'Edit';
+  } else {
+    subjectPrefixInput.readOnly = false;
+    subjectPrefixLockBtn.textContent = 'Lock';
+  }
+}
+
+subjectPrefixLockBtn.addEventListener('click', () => {
+  if (subjectPrefixInput.readOnly) {
+    subjectPrefixInput.readOnly = false;
+    subjectPrefixLockBtn.textContent = 'Lock';
+    subjectPrefixInput.focus();
+  } else {
+    const prefix = subjectPrefixInput.value.trim();
+    if (!prefix) {
+      setStatus('Type a subject prefix before locking it', 'err');
+      return;
+    }
+    localStorage.setItem(SUBJECT_PREFIX_KEY, prefix);
+    subjectPrefixInput.readOnly = true;
+    subjectPrefixLockBtn.textContent = 'Edit';
+    setStatus('Subject prefix locked', 'ok');
+  }
+});
+
+applySubjectPrefixState();
+
+// Builds e.g. "Smart ES | PL Audit | Enriquez, Samantha Nicole | WE0906" from the
+// locked prefix plus whatever's currently in the form.
+function buildSubjectLine() {
+  const parts = [];
+  const prefix = val('subjectPrefix').trim();
+  if (prefix) parts.push(prefix);
+  if (val('agentName').trim()) parts.push(val('agentName').trim());
+  if (val('hdrWin').trim()) parts.push(val('hdrWin').trim());
+  return parts.join(' | ');
+}
+
+document.getElementById('copySubjectBtn').addEventListener('click', async () => {
+  const subject = buildSubjectLine();
+  if (!subject) {
+    setStatus('Fill in agent name / audit reference first', 'err');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(subject);
+    setStatus(`Copied subject: "${subject}"`, 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus('Could not copy subject line', 'err');
+  }
+});
 
 /* ---------------- Roster upload & sync ---------------- */
 
