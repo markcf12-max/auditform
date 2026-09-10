@@ -1027,7 +1027,7 @@ function buildInlineStyledReport() {
   const boldCellStyle = cellStyle + 'font-weight:700;';
   const categoryCellStyle = cellStyle + 'font-weight:700;text-align:center;vertical-align:middle;';
   const parameterCellStyle = cellStyle + 'text-align:center;text-transform:uppercase;vertical-align:middle;';
-  const constraintCellStyle = cellStyle + 'text-align:center;';
+  const constraintCellStyle = cellStyle + 'text-align:center;vertical-align:middle;';
   const remarkCellStyle = cellStyle + 'white-space:pre-wrap;';
   const tableAttrs = 'border="1" cellpadding="8" cellspacing="0" bordercolor="#8c8c8c"';
   const tableStyle = 'border-collapse:collapse;border:1px solid #8c8c8c;width:100%;margin-top:14px;';
