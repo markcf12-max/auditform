@@ -727,6 +727,14 @@ function escapeHtml(str) {
   return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// Outlook (desktop) renders pasted email content through Word's HTML engine, which
+// ignores CSS like white-space:pre-wrap but does respect real <br> elements. Used only
+// for the copy/paste output — the live preview relies on CSS pre-wrap instead, since
+// converting to <br> there would break how contenteditable syncs edits back to data.
+function escapeHtmlWithBreaks(str) {
+  return escapeHtml(str).replace(/\r\n|\r|\n/g, '<br>');
+}
+
 function setStatus(msg, kind) {
   statusMsg.textContent = msg;
   statusMsg.className = 'status' + (kind ? ' ' + kind : '');
@@ -1049,7 +1057,7 @@ function buildInlineStyledReport() {
       ${categoryCell}
       ${parameterCell}
       <td ${tableAttrs} style="${constraintCellStyle}">${escapeHtml(r.constraint)}</td>
-      <td ${tableAttrs} style="${remarkCellStyle}">${escapeHtml(r.remark)}</td>
+      <td ${tableAttrs} style="${remarkCellStyle}">${escapeHtmlWithBreaks(r.remark)}</td>
     </tr>
   `;
   }).join('');
