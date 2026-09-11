@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20260910d">
+<link rel="stylesheet" href="styles.css?v=20260910e">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.20.0/xlsx.full.min.js"></script>
 </head>
 <body>
@@ -134,6 +134,7 @@
       <button class="btn btn-tiny" id="closeArchivedModalBtn" type="button">✕ Close</button>
     </div>
     <p class="field-note">Archived audits are tucked away out of your main list, but never deleted — restore any of them back anytime.</p>
+    <input id="searchArchived" class="search-input" type="search" placeholder="Search by WIN ID, agent, or case #">
     <div id="archivedList" class="saved-list"><p class="empty-note">Connecting to Firestore…</p></div>
   </div>
 </div>
@@ -150,6 +151,6 @@
   <div class="pip-content" id="pipContent"></div>
 </div>
 
-<script type="module" src="script.js?v=20260910d"></script>
+<script type="module" src="script.js?v=20260910e"></script>
 </body>
 </html>
