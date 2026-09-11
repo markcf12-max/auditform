@@ -135,7 +135,8 @@ h1{font-size:22px;font-weight:700;margin:0 0 4px;letter-spacing:-.01em;}
 .search-input{
   font-family:inherit;font-size:13px;padding:8px 12px;
   border:1px solid var(--card-border);border-radius:999px;
-  min-width:220px;background:#f8fafc;flex:1;
+  min-width:220px;width:100%;background:#f8fafc;flex:1;
+  box-sizing:border-box;margin:4px 0 0;
   transition:border-color .15s, box-shadow .15s;
 }
 .search-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);background:#fff;}
