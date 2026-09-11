@@ -256,6 +256,7 @@ document.addEventListener('keydown', e => {
 });
 const statusMsg = document.getElementById('statusMsg');
 const searchInput = document.getElementById('searchAudits');
+const searchArchivedInput = document.getElementById('searchArchived');
 
 // hdrAgent/hdrTL were removed — agentName and teamLeader are now the single source
 // of truth for both the greeting and the detail table, so nothing has to be typed twice.
@@ -1390,13 +1391,18 @@ async function permanentlyDeleteAudit(id) {
 }
 
 function renderArchivedListFromDocs(docs) {
-  const archived = docs.filter(d => d.data().archived && !d.data().deleted);
+  const allArchived = docs.filter(d => d.data().archived && !d.data().deleted);
 
-  archivedBadge.textContent = archived.length;
-  archivedBadge.style.display = archived.length > 0 ? 'inline-block' : 'none';
+  archivedBadge.textContent = allArchived.length;
+  archivedBadge.style.display = allArchived.length > 0 ? 'inline-block' : 'none';
+
+  const term = (searchArchivedInput.value || '').trim().toLowerCase();
+  const archived = allArchived.filter(d => matchesSearch(d.data(), term));
 
   if (!archived.length) {
-    archivedListEl.innerHTML = '<p class="empty-note">Nothing archived yet. Use "Archive all" in Saved audits to tuck away everything currently in your active list.</p>';
+    archivedListEl.innerHTML = allArchived.length
+      ? '<p class="empty-note">No archived audits match that search.</p>'
+      : '<p class="empty-note">Nothing archived yet. Use "Archive all" in Saved audits to tuck away everything currently in your active list.</p>';
     return;
   }
 
@@ -1521,6 +1527,7 @@ document.getElementById('archiveAllBtn').addEventListener('click', async () => {
 });
 
 searchInput.addEventListener('input', () => renderSavedListFromDocs(latestDocs));
+searchArchivedInput.addEventListener('input', () => renderArchivedListFromDocs(latestDocs));
 
 // Live sync: any save/delete (from this tab or another) updates the list automatically.
 try {
