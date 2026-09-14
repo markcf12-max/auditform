@@ -694,6 +694,66 @@ document.addEventListener('mouseup', () => {
   document.body.style.userSelect = '';
 });
 
+/* ---------------- Floating stats widget ---------------- */
+
+const statsWidget = document.getElementById('statsWidget');
+const statsHeader = document.getElementById('statsHeader');
+const statsBody = document.getElementById('statsBody');
+const statsCloseBtn = document.getElementById('statsCloseBtn');
+const toggleStatsBtn = document.getElementById('toggleStatsBtn');
+
+function updateStatsWidget() {
+  if (statsWidget.style.display === 'none') return;
+  const activeDocs = latestDocs.filter(d => !d.data().deleted && !d.data().archived);
+  const total = activeDocs.length;
+  const emailed = activeDocs.filter(d => d.data().emailSent).length;
+  const logged = activeDocs.filter(d => d.data().loggedInQA).length;
+  const archivedCount = latestDocs.filter(d => d.data().archived && !d.data().deleted).length;
+
+  statsBody.innerHTML = `
+    <div class="stats-row"><span class="stats-label">Active audits</span><span class="stats-value">${total}</span></div>
+    <div class="stats-row"><span class="stats-label">Emailed</span><span class="stats-value">${emailed}/${total}</span></div>
+    <div class="stats-row"><span class="stats-label">Logged in QA form</span><span class="stats-value">${logged}/${total}</span></div>
+    <div class="stats-row"><span class="stats-label">Archived</span><span class="stats-value">${archivedCount}</span></div>
+  `;
+}
+
+function openStats() {
+  statsWidget.style.display = 'block';
+  updateStatsWidget();
+}
+
+function closeStats() {
+  statsWidget.style.display = 'none';
+}
+
+toggleStatsBtn.addEventListener('click', () => {
+  if (statsWidget.style.display === 'none') openStats(); else closeStats();
+});
+statsCloseBtn.addEventListener('click', closeStats);
+
+// Drag-to-move by the header, same pattern as the floating preview window.
+let statsDragging = false, statsOffsetX = 0, statsOffsetY = 0;
+statsHeader.addEventListener('mousedown', e => {
+  if (e.target.closest('.pip-btn')) return;
+  statsDragging = true;
+  const rect = statsWidget.getBoundingClientRect();
+  statsOffsetX = e.clientX - rect.left;
+  statsOffsetY = e.clientY - rect.top;
+  document.body.style.userSelect = 'none';
+});
+document.addEventListener('mousemove', e => {
+  if (!statsDragging) return;
+  statsWidget.style.left = `${e.clientX - statsOffsetX}px`;
+  statsWidget.style.top = `${e.clientY - statsOffsetY}px`;
+  statsWidget.style.right = 'auto';
+  statsWidget.style.bottom = 'auto';
+});
+document.addEventListener('mouseup', () => {
+  statsDragging = false;
+  document.body.style.userSelect = '';
+});
+
 headerFields.forEach(id => document.getElementById(id).addEventListener('input', () => { render(); saveDraft(); }));
 
 // Typing a WIN ID and clicking/tabbing away auto-fills Agent name & Team leader from the roster.
@@ -1537,6 +1597,7 @@ try {
     renderSavedListFromDocs(latestDocs);
     renderDeletedListFromDocs(latestDocs);
     renderArchivedListFromDocs(latestDocs);
+    updateStatsWidget();
   }, err => {
     console.error(err);
     savedListEl.innerHTML = '<p class="empty-note">Could not connect to Firestore. Check your config and security rules.</p>';
