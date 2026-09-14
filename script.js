@@ -787,23 +787,18 @@ statsPopoutBtn.addEventListener('click', async () => {
   try {
     const pipWin = await documentPictureInPicture.requestWindow({ width: 260, height: 220 });
 
-    // Copy the page's stylesheets across so the popped-out window looks consistent.
-    [...document.styleSheets].forEach(sheet => {
-      try {
-        const cssText = [...sheet.cssRules].map(r => r.cssText).join('\n');
-        const style = pipWin.document.createElement('style');
-        style.textContent = cssText;
-        pipWin.document.head.appendChild(style);
-      } catch (e) {
-        // Cross-origin stylesheet (e.g. Google Fonts) — link it directly instead.
-        if (sheet.href) {
-          const link = pipWin.document.createElement('link');
-          link.rel = 'stylesheet';
-          link.href = sheet.href;
-          pipWin.document.head.appendChild(link);
-        }
-      }
-    });
+    // Link directly to the real stylesheet/font files instead of copying CSS rules via
+    // JavaScript — reading cssRules can silently fail (cross-origin, timing, browser
+    // security), which was leaving the popped-out window completely unstyled.
+    const styleLink = pipWin.document.createElement('link');
+    styleLink.rel = 'stylesheet';
+    styleLink.href = new URL('styles.css?v=20260910j', location.href).href;
+    pipWin.document.head.appendChild(styleLink);
+
+    const fontLink = pipWin.document.createElement('link');
+    fontLink.rel = 'stylesheet';
+    fontLink.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap';
+    pipWin.document.head.appendChild(fontLink);
 
     pipWin.document.body.style.margin = '0';
     pipWin.document.body.style.background = '#fff';
@@ -891,6 +886,11 @@ function escapeHtml(str) {
 // converting to <br> there would break how contenteditable syncs edits back to data.
 function escapeHtmlWithBreaks(str) {
   return escapeHtml(str).replace(/\r\n|\r|\n/g, '<br>');
+}
+
+function truncateText(str, maxLen) {
+  const single = (str || '').replace(/\s+/g, ' ').trim();
+  return single.length > maxLen ? single.slice(0, maxLen).trim() + '…' : single;
 }
 
 function setStatus(msg, kind) {
@@ -1698,9 +1698,15 @@ function computeWeeklySummary(dateField) {
       week.total++;
 
       const key = `${r.category || '—'} | ${r.parameter || '—'} | ${r.constraint || '—'}`;
-      if (!week.breakdown[key]) week.breakdown[key] = { count: 0, agentTally: {} };
+      if (!week.breakdown[key]) week.breakdown[key] = { count: 0, agentTally: {}, sampleRemark: '' };
       week.breakdown[key].count++;
       week.breakdown[key].agentTally[agentName] = (week.breakdown[key].agentTally[agentName] || 0) + 1;
+      // Keep the longest remark seen for this finding as the representative example —
+      // longer remarks tend to have the most useful context, without needing AI to pick one.
+      const remarkText = (r.remark || '').trim();
+      if (remarkText.length > week.breakdown[key].sampleRemark.length) {
+        week.breakdown[key].sampleRemark = remarkText;
+      }
 
       week.agentCounts[agentName] = (week.agentCounts[agentName] || 0) + 1;
     });
@@ -1761,6 +1767,9 @@ function renderWeeklySummary() {
     sortedBreakdown.forEach(([key, entry]) => {
       const [cat, param, constraint] = key.split(' | ');
       const agentList = formatAgentTally(entry.agentTally).join(', ');
+      const exampleHtml = entry.sampleRemark
+        ? `<div class="summary-example"><span class="summary-example-label">Example:</span> "${escapeHtml(truncateText(entry.sampleRemark, 180))}"</div>`
+        : '';
       const item = document.createElement('div');
       item.className = 'summary-item';
       item.innerHTML = `
@@ -1771,6 +1780,7 @@ function renderWeeklySummary() {
           </div>
           <div class="summary-count">${entry.count}</div>
         </div>
+        ${exampleHtml}
         <div class="summary-agents">${escapeHtml(agentList)}</div>
       `;
       itemsContainer.appendChild(item);
@@ -1815,6 +1825,9 @@ copySummaryBtn.addEventListener('click', async () => {
         const [cat, param, constraint] = key.split(' | ');
         const agentList = formatAgentTally(entry.agentTally).join(', ');
         lines.push(`  ${cat} — ${param} — ${constraint}: ${entry.count}  [${agentList}]`);
+        if (entry.sampleRemark) {
+          lines.push(`    Example: "${truncateText(entry.sampleRemark, 220)}"`);
+        }
       });
     lines.push('');
   });
