@@ -1666,14 +1666,16 @@ function formatWeekEndingLabel(date) {
 
 // Tallies every finding row (across saved + archived, excluding deleted) into weekly
 // buckets keyed off whichever date field is selected, broken down by exactly which
-// category/parameter/constraint combination occurred and how many times.
+// category/parameter/constraint combination occurred, how many times, and which agents
+// were behind each occurrence — so repeat agents within a week stand out.
 function computeWeeklySummary(dateField) {
   const docsToUse = latestDocs.filter(d => !d.data().deleted);
-  const weeks = {}; // weekKey -> { label, sortKey, total, breakdown: { 'cat | param | constraint': count } }
+  const weeks = {};
 
   docsToUse.forEach(d => {
     const data = d.data();
     const parsed = parseDateFlexible(data[dateField]);
+    const agentName = (data.agentName || 'Unnamed agent').trim() || 'Unnamed agent';
     const rows = Array.isArray(data.rows) ? data.rows : [];
 
     rows.forEach(r => {
@@ -1691,14 +1693,29 @@ function computeWeeklySummary(dateField) {
         sortKey = -Infinity; // always sorts last
       }
 
-      if (!weeks[weekKey]) weeks[weekKey] = { label: weekLabel, sortKey, total: 0, breakdown: {} };
-      weeks[weekKey].total++;
+      if (!weeks[weekKey]) weeks[weekKey] = { label: weekLabel, sortKey, total: 0, breakdown: {}, agentCounts: {} };
+      const week = weeks[weekKey];
+      week.total++;
+
       const key = `${r.category || '—'} | ${r.parameter || '—'} | ${r.constraint || '—'}`;
-      weeks[weekKey].breakdown[key] = (weeks[weekKey].breakdown[key] || 0) + 1;
+      if (!week.breakdown[key]) week.breakdown[key] = { count: 0, agentTally: {} };
+      week.breakdown[key].count++;
+      week.breakdown[key].agentTally[agentName] = (week.breakdown[key].agentTally[agentName] || 0) + 1;
+
+      week.agentCounts[agentName] = (week.agentCounts[agentName] || 0) + 1;
     });
   });
 
   return Object.values(weeks).sort((a, b) => b.sortKey - a.sortKey);
+}
+
+// Renders a compact "Agent (2)" style list from an agent-name -> count map, sorted by
+// count descending, used both under each finding and in the repeat-agents callout.
+function formatAgentTally(tally, minCount) {
+  return Object.entries(tally)
+    .filter(([, count]) => count >= (minCount || 1))
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => count > 1 ? `${name} (${count})` : name);
 }
 
 function getSelectedSummaryDateField() {
@@ -1719,10 +1736,16 @@ function renderWeeklySummary() {
   summary.forEach((week, idx) => {
     const folderId = `summaryFolder${idx}`;
     const expanded = idx === 0;
-    const sortedBreakdown = Object.entries(week.breakdown).sort((a, b) => b[1] - a[1]);
+    const sortedBreakdown = Object.entries(week.breakdown).sort((a, b) => b[1].count - a[1].count);
+    const repeatAgents = formatAgentTally(week.agentCounts, 2); // agents with 2+ findings this week
 
     const folder = document.createElement('div');
     folder.className = 'archive-folder';
+
+    const repeatHtml = repeatAgents.length
+      ? `<div class="repeat-agents-banner">🔁 Repeat this week: ${repeatAgents.map(escapeHtml).join(', ')}</div>`
+      : '';
+
     folder.innerHTML = `
       <button type="button" class="folder-header" data-summary-toggle="${folderId}">
         <span class="folder-icon">📅</span>
@@ -1730,21 +1753,25 @@ function renderWeeklySummary() {
         <span class="folder-count">${week.total}</span>
         <span class="folder-chevron">${expanded ? '▾' : '▸'}</span>
       </button>
-      <div class="folder-items" id="${folderId}" style="display:${expanded ? 'flex' : 'none'};"></div>
+      <div class="folder-items" id="${folderId}" style="display:${expanded ? 'flex' : 'none'};">${repeatHtml}</div>
     `;
     summaryContent.appendChild(folder);
 
     const itemsContainer = folder.querySelector('.folder-items');
-    sortedBreakdown.forEach(([key, count]) => {
+    sortedBreakdown.forEach(([key, entry]) => {
       const [cat, param, constraint] = key.split(' | ');
+      const agentList = formatAgentTally(entry.agentTally).join(', ');
       const item = document.createElement('div');
       item.className = 'summary-item';
       item.innerHTML = `
-        <div class="summary-item-text">
-          <div class="summary-cat">${escapeHtml(cat)}</div>
-          <div class="summary-detail">${escapeHtml(param)} — ${escapeHtml(constraint)}</div>
+        <div class="summary-item-main">
+          <div class="summary-item-text">
+            <div class="summary-cat">${escapeHtml(cat)}</div>
+            <div class="summary-detail">${escapeHtml(param)} — ${escapeHtml(constraint)}</div>
+          </div>
+          <div class="summary-count">${entry.count}</div>
         </div>
-        <div class="summary-count">${count}</div>
+        <div class="summary-agents">${escapeHtml(agentList)}</div>
       `;
       itemsContainer.appendChild(item);
     });
@@ -1776,11 +1803,18 @@ copySummaryBtn.addEventListener('click', async () => {
   const lines = [];
   summary.forEach(week => {
     lines.push(`${week.label} (${week.total} total)`);
+
+    const repeatAgents = formatAgentTally(week.agentCounts, 2);
+    if (repeatAgents.length) {
+      lines.push(`  Repeat this week: ${repeatAgents.join(', ')}`);
+    }
+
     Object.entries(week.breakdown)
-      .sort((a, b) => b[1] - a[1])
-      .forEach(([key, count]) => {
+      .sort((a, b) => b[1].count - a[1].count)
+      .forEach(([key, entry]) => {
         const [cat, param, constraint] = key.split(' | ');
-        lines.push(`  ${cat} — ${param} — ${constraint}: ${count}`);
+        const agentList = formatAgentTally(entry.agentTally).join(', ');
+        lines.push(`  ${cat} — ${param} — ${constraint}: ${entry.count}  [${agentList}]`);
       });
     lines.push('');
   });
