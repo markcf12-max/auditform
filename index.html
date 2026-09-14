@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20260910f">
+<link rel="stylesheet" href="styles.css?v=20260910h">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.20.0/xlsx.full.min.js"></script>
 </head>
 <body>
@@ -29,6 +29,7 @@
         Archived <span id="archivedBadge" class="badge-count badge-count-archive" style="display:none;"></span>
       </button>
       <button class="btn" id="toggleStatsBtn" type="button">Stats</button>
+      <button class="btn" id="openSummaryBtn" type="button">Summary</button>
     </div>
   </div>
 
@@ -140,6 +141,22 @@
   </div>
 </div>
 
+<div class="modal-overlay no-print" id="summaryModal" style="display:none;">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Weekly summary</h2>
+      <button class="btn btn-tiny" id="closeSummaryModalBtn" type="button">✕ Close</button>
+    </div>
+    <p class="field-note">Every finding across your saved and archived audits, grouped by the week it happened in.</p>
+    <div class="summary-controls">
+      <label class="summary-radio"><input type="radio" name="summaryDateField" value="interactionDate" checked> Group by interaction date</label>
+      <label class="summary-radio"><input type="radio" name="summaryDateField" value="evalDate"> Group by evaluation date</label>
+      <button class="btn btn-tiny" id="copySummaryBtn" type="button">Copy as text</button>
+    </div>
+    <div id="summaryContent" class="saved-list"><p class="empty-note">Loading…</p></div>
+  </div>
+</div>
+
 <div class="pip-window no-print" id="pipWindow" style="display:none;">
   <div class="pip-header" id="pipHeader">
     <span id="pipTitle">Preview</span>
@@ -155,11 +172,14 @@
 <div class="stats-widget no-print" id="statsWidget" style="display:none;">
   <div class="stats-header" id="statsHeader">
     <span>Audit stats</span>
-    <button type="button" id="statsCloseBtn" class="pip-btn" title="Close">✕</button>
+    <div class="pip-header-actions">
+      <button type="button" id="statsPopoutBtn" class="pip-btn" title="Pop out as a floating window (Chrome/Edge)">⧉</button>
+      <button type="button" id="statsCloseBtn" class="pip-btn" title="Close">✕</button>
+    </div>
   </div>
   <div class="stats-body" id="statsBody">Loading…</div>
 </div>
 
-<script type="module" src="script.js?v=20260910f"></script>
+<script type="module" src="script.js?v=20260910h"></script>
 </body>
 </html>
