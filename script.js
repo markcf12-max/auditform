@@ -206,6 +206,12 @@ const openArchivedBtn = document.getElementById('openArchivedBtn');
 const closeArchivedModalBtn = document.getElementById('closeArchivedModalBtn');
 const archivedBadge = document.getElementById('archivedBadge');
 
+const summaryModal = document.getElementById('summaryModal');
+const openSummaryBtn = document.getElementById('openSummaryBtn');
+const closeSummaryModalBtn = document.getElementById('closeSummaryModalBtn');
+const summaryContent = document.getElementById('summaryContent');
+const copySummaryBtn = document.getElementById('copySummaryBtn');
+
 function openSavedAuditsModal() {
   savedAuditsModal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
@@ -236,6 +242,17 @@ function closeArchivedModal() {
   document.body.style.overflow = '';
 }
 
+function openSummaryModal() {
+  summaryModal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  renderWeeklySummary();
+}
+
+function closeSummaryModal() {
+  summaryModal.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
 openSavedAuditsBtn.addEventListener('click', openSavedAuditsModal);
 closeSavedAuditsBtn.addEventListener('click', closeSavedAuditsModal);
 savedAuditsModal.addEventListener('click', e => { if (e.target === savedAuditsModal) closeSavedAuditsModal(); });
@@ -248,11 +265,16 @@ openArchivedBtn.addEventListener('click', openArchivedModal);
 closeArchivedModalBtn.addEventListener('click', closeArchivedModal);
 archivedAuditsModal.addEventListener('click', e => { if (e.target === archivedAuditsModal) closeArchivedModal(); });
 
+openSummaryBtn.addEventListener('click', openSummaryModal);
+closeSummaryModalBtn.addEventListener('click', closeSummaryModal);
+summaryModal.addEventListener('click', e => { if (e.target === summaryModal) closeSummaryModal(); });
+
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if (savedAuditsModal.style.display === 'flex') closeSavedAuditsModal();
   if (deletedAuditsModal.style.display === 'flex') closeDeletedModal();
   if (archivedAuditsModal.style.display === 'flex') closeArchivedModal();
+  if (summaryModal.style.display === 'flex') closeSummaryModal();
 });
 const statusMsg = document.getElementById('statusMsg');
 const searchInput = document.getElementById('searchAudits');
@@ -700,22 +722,35 @@ const statsWidget = document.getElementById('statsWidget');
 const statsHeader = document.getElementById('statsHeader');
 const statsBody = document.getElementById('statsBody');
 const statsCloseBtn = document.getElementById('statsCloseBtn');
+const statsPopoutBtn = document.getElementById('statsPopoutBtn');
 const toggleStatsBtn = document.getElementById('toggleStatsBtn');
 
-function updateStatsWidget() {
-  if (statsWidget.style.display === 'none') return;
+let systemPipWindow = null; // set once a real OS-level PiP window is open
+
+function computeStatsHtml() {
   const activeDocs = latestDocs.filter(d => !d.data().deleted && !d.data().archived);
   const total = activeDocs.length;
   const emailed = activeDocs.filter(d => d.data().emailSent).length;
   const logged = activeDocs.filter(d => d.data().loggedInQA).length;
   const archivedCount = latestDocs.filter(d => d.data().archived && !d.data().deleted).length;
 
-  statsBody.innerHTML = `
+  return `
     <div class="stats-row"><span class="stats-label">Active audits</span><span class="stats-value">${total}</span></div>
     <div class="stats-row"><span class="stats-label">Emailed</span><span class="stats-value">${emailed}/${total}</span></div>
     <div class="stats-row"><span class="stats-label">Logged in QA form</span><span class="stats-value">${logged}/${total}</span></div>
     <div class="stats-row"><span class="stats-label">Archived</span><span class="stats-value">${archivedCount}</span></div>
   `;
+}
+
+function updateStatsWidget() {
+  const html = computeStatsHtml();
+  if (statsWidget.style.display !== 'none') statsBody.innerHTML = html;
+  // If popped out into a real system window, keep that in sync too — it has its own
+  // document, so it needs its content updated independently of the in-page widget.
+  if (systemPipWindow) {
+    const pipBody = systemPipWindow.document.getElementById('statsBodyPip');
+    if (pipBody) pipBody.innerHTML = html;
+  }
 }
 
 function openStats() {
@@ -728,9 +763,71 @@ function closeStats() {
 }
 
 toggleStatsBtn.addEventListener('click', () => {
+  if (systemPipWindow) {
+    setStatus('Stats are already popped out in a floating window', 'ok');
+    return;
+  }
   if (statsWidget.style.display === 'none') openStats(); else closeStats();
 });
 statsCloseBtn.addEventListener('click', closeStats);
+
+// Pops the stats out of the page entirely into a real, OS-level always-on-top window
+// using the Document Picture-in-Picture API. Unlike the in-page floating widget, this
+// window stays visible even if you switch tabs, minimize the browser, or work in a
+// different app. Currently supported in Chrome and Edge only.
+statsPopoutBtn.addEventListener('click', async () => {
+  if (!('documentPictureInPicture' in window)) {
+    setStatus('Popping out needs Chrome or Edge — not supported in this browser', 'err');
+    return;
+  }
+  if (systemPipWindow) {
+    setStatus('Already popped out', 'ok');
+    return;
+  }
+  try {
+    const pipWin = await documentPictureInPicture.requestWindow({ width: 260, height: 220 });
+
+    // Copy the page's stylesheets across so the popped-out window looks consistent.
+    [...document.styleSheets].forEach(sheet => {
+      try {
+        const cssText = [...sheet.cssRules].map(r => r.cssText).join('\n');
+        const style = pipWin.document.createElement('style');
+        style.textContent = cssText;
+        pipWin.document.head.appendChild(style);
+      } catch (e) {
+        // Cross-origin stylesheet (e.g. Google Fonts) — link it directly instead.
+        if (sheet.href) {
+          const link = pipWin.document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = sheet.href;
+          pipWin.document.head.appendChild(link);
+        }
+      }
+    });
+
+    pipWin.document.body.style.margin = '0';
+    pipWin.document.body.style.background = '#fff';
+    pipWin.document.body.style.fontFamily = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+
+    const container = pipWin.document.createElement('div');
+    container.id = 'statsBodyPip';
+    container.className = 'stats-body';
+    container.innerHTML = computeStatsHtml();
+    pipWin.document.body.appendChild(container);
+
+    systemPipWindow = pipWin;
+    closeStats(); // no need for the in-page widget while it's popped out
+
+    pipWin.addEventListener('pagehide', () => {
+      systemPipWindow = null;
+    });
+
+    setStatus('Popped out — stats will stay visible even outside this tab', 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus('Could not pop out — try again', 'err');
+  }
+});
 
 // Drag-to-move by the header, same pattern as the floating preview window.
 let statsDragging = false, statsOffsetX = 0, statsOffsetY = 0;
@@ -1547,6 +1644,156 @@ function renderArchivedListFromDocs(docs) {
   });
 }
 
+/* ---------------- Weekly summary ---------------- */
+
+function parseDateFlexible(str) {
+  if (!str) return null;
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// "Week ending" convention here is the Sunday that closes out the Mon–Sun week a date
+// falls in. A date that's already a Sunday maps to itself.
+function getWeekEndingDate(date) {
+  const daysUntilSunday = (7 - date.getDay()) % 7;
+  const weekEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + daysUntilSunday);
+  return weekEnd;
+}
+
+function formatWeekEndingLabel(date) {
+  return `Week Ending ${date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`;
+}
+
+// Tallies every finding row (across saved + archived, excluding deleted) into weekly
+// buckets keyed off whichever date field is selected, broken down by exactly which
+// category/parameter/constraint combination occurred and how many times.
+function computeWeeklySummary(dateField) {
+  const docsToUse = latestDocs.filter(d => !d.data().deleted);
+  const weeks = {}; // weekKey -> { label, sortKey, total, breakdown: { 'cat | param | constraint': count } }
+
+  docsToUse.forEach(d => {
+    const data = d.data();
+    const parsed = parseDateFlexible(data[dateField]);
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+
+    rows.forEach(r => {
+      if (!r.category && !r.parameter && !r.constraint) return; // skip fully blank findings
+
+      let weekKey, weekLabel, sortKey;
+      if (parsed) {
+        const weekEnd = getWeekEndingDate(parsed);
+        weekKey = weekEnd.getTime();
+        weekLabel = formatWeekEndingLabel(weekEnd);
+        sortKey = weekKey;
+      } else {
+        weekKey = 'unknown';
+        weekLabel = 'Unknown week (date not recognized)';
+        sortKey = -Infinity; // always sorts last
+      }
+
+      if (!weeks[weekKey]) weeks[weekKey] = { label: weekLabel, sortKey, total: 0, breakdown: {} };
+      weeks[weekKey].total++;
+      const key = `${r.category || '—'} | ${r.parameter || '—'} | ${r.constraint || '—'}`;
+      weeks[weekKey].breakdown[key] = (weeks[weekKey].breakdown[key] || 0) + 1;
+    });
+  });
+
+  return Object.values(weeks).sort((a, b) => b.sortKey - a.sortKey);
+}
+
+function getSelectedSummaryDateField() {
+  const checked = document.querySelector('input[name="summaryDateField"]:checked');
+  return checked ? checked.value : 'interactionDate';
+}
+
+function renderWeeklySummary() {
+  const dateField = getSelectedSummaryDateField();
+  const summary = computeWeeklySummary(dateField);
+
+  if (!summary.length) {
+    summaryContent.innerHTML = '<p class="empty-note">No findings to summarize yet — save some audits with at least one finding first.</p>';
+    return;
+  }
+
+  summaryContent.innerHTML = '';
+  summary.forEach((week, idx) => {
+    const folderId = `summaryFolder${idx}`;
+    const expanded = idx === 0;
+    const sortedBreakdown = Object.entries(week.breakdown).sort((a, b) => b[1] - a[1]);
+
+    const folder = document.createElement('div');
+    folder.className = 'archive-folder';
+    folder.innerHTML = `
+      <button type="button" class="folder-header" data-summary-toggle="${folderId}">
+        <span class="folder-icon">📅</span>
+        <span class="folder-label">${escapeHtml(week.label)}</span>
+        <span class="folder-count">${week.total}</span>
+        <span class="folder-chevron">${expanded ? '▾' : '▸'}</span>
+      </button>
+      <div class="folder-items" id="${folderId}" style="display:${expanded ? 'flex' : 'none'};"></div>
+    `;
+    summaryContent.appendChild(folder);
+
+    const itemsContainer = folder.querySelector('.folder-items');
+    sortedBreakdown.forEach(([key, count]) => {
+      const [cat, param, constraint] = key.split(' | ');
+      const item = document.createElement('div');
+      item.className = 'summary-item';
+      item.innerHTML = `
+        <div class="summary-item-text">
+          <div class="summary-cat">${escapeHtml(cat)}</div>
+          <div class="summary-detail">${escapeHtml(param)} — ${escapeHtml(constraint)}</div>
+        </div>
+        <div class="summary-count">${count}</div>
+      `;
+      itemsContainer.appendChild(item);
+    });
+  });
+
+  summaryContent.querySelectorAll('[data-summary-toggle]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.getAttribute('data-summary-toggle'));
+      const chevron = btn.querySelector('.folder-chevron');
+      const isOpen = target.style.display !== 'none';
+      target.style.display = isOpen ? 'none' : 'flex';
+      chevron.textContent = isOpen ? '▸' : '▾';
+    });
+  });
+}
+
+document.querySelectorAll('input[name="summaryDateField"]').forEach(radio => {
+  radio.addEventListener('change', renderWeeklySummary);
+});
+
+copySummaryBtn.addEventListener('click', async () => {
+  const dateField = getSelectedSummaryDateField();
+  const summary = computeWeeklySummary(dateField);
+  if (!summary.length) {
+    setStatus('Nothing to copy yet', 'err');
+    return;
+  }
+
+  const lines = [];
+  summary.forEach(week => {
+    lines.push(`${week.label} (${week.total} total)`);
+    Object.entries(week.breakdown)
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([key, count]) => {
+        const [cat, param, constraint] = key.split(' | ');
+        lines.push(`  ${cat} — ${param} — ${constraint}: ${count}`);
+      });
+    lines.push('');
+  });
+
+  try {
+    await navigator.clipboard.writeText(lines.join('\n').trim());
+    setStatus('Summary copied as plain text', 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus('Could not copy summary', 'err');
+  }
+});
+
 async function unarchiveAudit(id) {
   setStatus('Restoring to saved audits…');
   try {
@@ -1598,6 +1845,7 @@ try {
     renderDeletedListFromDocs(latestDocs);
     renderArchivedListFromDocs(latestDocs);
     updateStatsWidget();
+    if (summaryModal.style.display === 'flex') renderWeeklySummary();
   }, err => {
     console.error(err);
     savedListEl.innerHTML = '<p class="empty-note">Could not connect to Firestore. Check your config and security rules.</p>';
