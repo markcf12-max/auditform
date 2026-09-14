@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20260910e">
+<link rel="stylesheet" href="styles.css?v=20260910f">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.20.0/xlsx.full.min.js"></script>
 </head>
 <body>
@@ -28,6 +28,7 @@
       <button class="btn" id="openArchivedBtn" type="button">
         Archived <span id="archivedBadge" class="badge-count badge-count-archive" style="display:none;"></span>
       </button>
+      <button class="btn" id="toggleStatsBtn" type="button">Stats</button>
     </div>
   </div>
 
@@ -151,6 +152,14 @@
   <div class="pip-content" id="pipContent"></div>
 </div>
 
-<script type="module" src="script.js?v=20260910e"></script>
+<div class="stats-widget no-print" id="statsWidget" style="display:none;">
+  <div class="stats-header" id="statsHeader">
+    <span>Audit stats</span>
+    <button type="button" id="statsCloseBtn" class="pip-btn" title="Close">✕</button>
+  </div>
+  <div class="stats-body" id="statsBody">Loading…</div>
+</div>
+
+<script type="module" src="script.js?v=20260910f"></script>
 </body>
 </html>
