@@ -787,35 +787,21 @@ statsPopoutBtn.addEventListener('click', async () => {
   try {
     const pipWin = await documentPictureInPicture.requestWindow({ width: 260, height: 220 });
 
-    // Fetch the CSS as raw text and inline it directly as a <style> block, rather than
-    // using a <link> tag — external stylesheet loading inside a Document
-    // Picture-in-Picture window has proven unreliable, but a plain fetch + inline
-    // <style> sidesteps that entirely since it doesn't depend on the window's own
-    // resource-loading behavior at all.
-    try {
-      const cssUrl = new URL('styles.css?v=20260910k', location.href).href;
-      const cssRes = await fetch(cssUrl);
-      const cssText = await cssRes.text();
-      const styleEl = pipWin.document.createElement('style');
-      styleEl.textContent = cssText;
-      pipWin.document.head.appendChild(styleEl);
-    } catch (cssErr) {
-      console.error('Could not fetch styles.css for popout window', cssErr);
-    }
-
-    try {
-      const fontCssRes = await fetch('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-      const fontCssText = await fontCssRes.text();
-      const fontStyleEl = pipWin.document.createElement('style');
-      fontStyleEl.textContent = fontCssText;
-      pipWin.document.head.appendChild(fontStyleEl);
-    } catch (fontErr) {
-      console.error('Could not fetch Inter font CSS for popout window', fontErr);
-    }
-
-    pipWin.document.body.style.margin = '0';
-    pipWin.document.body.style.background = '#fff';
-    pipWin.document.body.style.fontFamily = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    // Hardcoded CSS, not fetched or copied from anywhere — two different attempts to
+    // load external/copied styles into this window silently failed, so this removes
+    // any network dependency for the core styling entirely. It's a plain string
+    // already in memory, appended synchronously; nothing can fail to load.
+    const popoutCss = `
+      body{margin:0;background:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;}
+      .stats-body{padding:14px 16px;}
+      .stats-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #e2e8f0;font-size:14px;}
+      .stats-row:last-child{border-bottom:none;}
+      .stats-label{color:#64748b;}
+      .stats-value{font-weight:700;color:#0f172a;}
+    `;
+    const styleEl = pipWin.document.createElement('style');
+    styleEl.textContent = popoutCss;
+    pipWin.document.head.appendChild(styleEl);
 
     const container = pipWin.document.createElement('div');
     container.id = 'statsBodyPip';
@@ -1744,51 +1730,73 @@ function getSelectedSummaryDateField() {
 
 function getSelectedSummaryViewMode() {
   const checked = document.querySelector('input[name="summaryViewMode"]:checked');
-  return checked ? checked.value : 'aggregate';
+  return checked ? checked.value : 'topic';
 }
 
-// Groups whole audits (not individual findings) by week, for the "full compilation" view —
-// every complete audit report that happened in a given week, stacked one after another.
-function computeWeeklyCompilation(dateField) {
+// Same weekly buckets as the by-topic view, but organized the other way around: for
+// each week, which agents showed up and exactly which topics/parameters they were
+// each hit with. This is what actually answers "who got flagged for what, this week."
+function computeWeeklyByAgent(dateField) {
   const docsToUse = latestDocs.filter(d => !d.data().deleted);
   const weeks = {};
 
   docsToUse.forEach(d => {
     const data = d.data();
     const parsed = parseDateFlexible(data[dateField]);
+    const agentName = (data.agentName || 'Unnamed agent').trim() || 'Unnamed agent';
+    const rows = Array.isArray(data.rows) ? data.rows : [];
 
-    let weekKey, weekLabel, sortKey;
-    if (parsed) {
-      const weekEnd = getWeekEndingDate(parsed);
-      weekKey = weekEnd.getTime();
-      weekLabel = formatWeekEndingLabel(weekEnd);
-      sortKey = weekKey;
-    } else {
-      weekKey = 'unknown';
-      weekLabel = 'Unknown week (date not recognized)';
-      sortKey = -Infinity;
-    }
+    rows.forEach(r => {
+      if (!r.category && !r.parameter && !r.constraint) return;
 
-    if (!weeks[weekKey]) weeks[weekKey] = { label: weekLabel, sortKey, audits: [] };
-    weeks[weekKey].audits.push(data);
+      let weekKey, weekLabel, sortKey;
+      if (parsed) {
+        const weekEnd = getWeekEndingDate(parsed);
+        weekKey = weekEnd.getTime();
+        weekLabel = formatWeekEndingLabel(weekEnd);
+        sortKey = weekKey;
+      } else {
+        weekKey = 'unknown';
+        weekLabel = 'Unknown week (date not recognized)';
+        sortKey = -Infinity;
+      }
+
+      if (!weeks[weekKey]) weeks[weekKey] = { label: weekLabel, sortKey, agents: {} };
+      const week = weeks[weekKey];
+
+      if (!week.agents[agentName]) week.agents[agentName] = { total: 0, topics: {} };
+      const agent = week.agents[agentName];
+      agent.total++;
+
+      const key = `${r.category || '—'} | ${r.parameter || '—'} | ${r.constraint || '—'}`;
+      if (!agent.topics[key]) agent.topics[key] = { count: 0, sampleRemark: '' };
+      agent.topics[key].count++;
+      const remarkText = (r.remark || '').trim();
+      if (remarkText.length > agent.topics[key].sampleRemark.length) {
+        agent.topics[key].sampleRemark = remarkText;
+      }
+    });
   });
 
   return Object.values(weeks).sort((a, b) => b.sortKey - a.sortKey);
 }
 
-function renderWeeklyCompilation() {
+function renderWeeklyByAgent() {
   const dateField = getSelectedSummaryDateField();
-  const weeks = computeWeeklyCompilation(dateField);
+  const weeks = computeWeeklyByAgent(dateField);
 
   if (!weeks.length) {
-    summaryContent.innerHTML = '<p class="empty-note">No saved audits to compile yet.</p>';
+    summaryContent.innerHTML = '<p class="empty-note">No findings to summarize yet — save some audits with at least one finding first.</p>';
     return;
   }
 
   summaryContent.innerHTML = '';
   weeks.forEach((week, idx) => {
-    const folderId = `compileFolder${idx}`;
+    const folderId = `agentFolder${idx}`;
     const expanded = idx === 0;
+    // Agents with the most findings that week float to the top — repeat agents stand out naturally.
+    const sortedAgents = Object.entries(week.agents).sort((a, b) => b[1].total - a[1].total);
+    const weekTotal = sortedAgents.reduce((sum, [, a]) => sum + a.total, 0);
 
     const folder = document.createElement('div');
     folder.className = 'archive-folder';
@@ -1796,7 +1804,7 @@ function renderWeeklyCompilation() {
       <button type="button" class="folder-header" data-summary-toggle="${folderId}">
         <span class="folder-icon">📅</span>
         <span class="folder-label">${escapeHtml(week.label)}</span>
-        <span class="folder-count">${week.audits.length}</span>
+        <span class="folder-count">${weekTotal}</span>
         <span class="folder-chevron">${expanded ? '▾' : '▸'}</span>
       </button>
       <div class="folder-items" id="${folderId}" style="display:${expanded ? 'flex' : 'none'};"></div>
@@ -1804,11 +1812,36 @@ function renderWeeklyCompilation() {
     summaryContent.appendChild(folder);
 
     const itemsContainer = folder.querySelector('.folder-items');
-    week.audits.forEach(auditData => {
+    sortedAgents.forEach(([agentName, agent]) => {
+      const isRepeat = agent.total > 1;
+      const topicRows = Object.entries(agent.topics)
+        .sort((a, b) => b[1].count - a[1].count)
+        .map(([key, entry]) => {
+          const [cat, param, constraint] = key.split(' | ');
+          const exampleHtml = entry.sampleRemark
+            ? `<div class="summary-example"><span class="summary-example-label">Example:</span> "${escapeHtml(truncateText(entry.sampleRemark, 160))}"</div>`
+            : '';
+          return `
+            <div class="agent-topic-row">
+              <div class="agent-topic-main">
+                <span class="agent-topic-cat">${escapeHtml(cat)}</span>
+                <span class="agent-topic-detail">${escapeHtml(param)} — ${escapeHtml(constraint)}</span>
+              </div>
+              <div class="summary-count">${entry.count}</div>
+              ${exampleHtml}
+            </div>
+          `;
+        }).join('');
+
       const card = document.createElement('div');
-      card.className = 'compiled-audit-card';
-      const headerLine = `WIN ${auditData.winId || '—'} · ${auditData.agentName || 'Unnamed agent'} · Case ${auditData.caseId || '—'}`;
-      card.innerHTML = `<div class="compiled-audit-header">${escapeHtml(headerLine)}</div>${buildStaticReportHtml(auditData)}`;
+      card.className = 'agent-card';
+      card.innerHTML = `
+        <div class="agent-card-header">
+          <span class="agent-name">${escapeHtml(agentName)}</span>
+          ${isRepeat ? `<span class="badge badge-unsent">🔁 ${agent.total} findings</span>` : `<span class="agent-total">${agent.total} finding</span>`}
+        </div>
+        <div class="agent-topics">${topicRows}</div>
+      `;
       itemsContainer.appendChild(card);
     });
   });
@@ -1826,9 +1859,9 @@ function renderWeeklyCompilation() {
 
 // Single entry point that renders whichever view mode is currently selected.
 function renderSummaryView() {
-  if (getSelectedSummaryViewMode() === 'compilation') {
-    renderWeeklyCompilation();
-    copySummaryBtn.style.display = 'none'; // plain-text export only makes sense for the tallied view
+  if (getSelectedSummaryViewMode() === 'agent') {
+    renderWeeklyByAgent();
+    copySummaryBtn.style.display = 'none'; // plain-text export currently only covers the by-topic view
   } else {
     renderWeeklySummary();
     copySummaryBtn.style.display = '';
