@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20260910l">
+<link rel="stylesheet" href="styles.css?v=20260910m">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.20.0/xlsx.full.min.js"></script>
 </head>
 <body>
@@ -149,8 +149,8 @@
     </div>
     <p class="field-note">Every finding across your saved and archived audits, grouped by the week it happened in.</p>
     <div class="summary-controls">
-      <label class="summary-radio"><input type="radio" name="summaryViewMode" value="aggregate" checked> Aggregated tallies</label>
-      <label class="summary-radio"><input type="radio" name="summaryViewMode" value="compilation"> Full audit compilation</label>
+      <label class="summary-radio"><input type="radio" name="summaryViewMode" value="topic" checked> By topic</label>
+      <label class="summary-radio"><input type="radio" name="summaryViewMode" value="agent"> By agent</label>
     </div>
     <div class="summary-controls">
       <label class="summary-radio"><input type="radio" name="summaryDateField" value="interactionDate" checked> Group by interaction date</label>
@@ -184,6 +184,6 @@
   <div class="stats-body" id="statsBody">Loading…</div>
 </div>
 
-<script type="module" src="script.js?v=20260910l"></script>
+<script type="module" src="script.js?v=20260910m"></script>
 </body>
 </html>
