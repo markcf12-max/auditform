@@ -245,7 +245,7 @@ function closeArchivedModal() {
 function openSummaryModal() {
   summaryModal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
-  renderWeeklySummary();
+  renderSummaryView();
 }
 
 function closeSummaryModal() {
@@ -787,18 +787,31 @@ statsPopoutBtn.addEventListener('click', async () => {
   try {
     const pipWin = await documentPictureInPicture.requestWindow({ width: 260, height: 220 });
 
-    // Link directly to the real stylesheet/font files instead of copying CSS rules via
-    // JavaScript — reading cssRules can silently fail (cross-origin, timing, browser
-    // security), which was leaving the popped-out window completely unstyled.
-    const styleLink = pipWin.document.createElement('link');
-    styleLink.rel = 'stylesheet';
-    styleLink.href = new URL('styles.css?v=20260910j', location.href).href;
-    pipWin.document.head.appendChild(styleLink);
+    // Fetch the CSS as raw text and inline it directly as a <style> block, rather than
+    // using a <link> tag — external stylesheet loading inside a Document
+    // Picture-in-Picture window has proven unreliable, but a plain fetch + inline
+    // <style> sidesteps that entirely since it doesn't depend on the window's own
+    // resource-loading behavior at all.
+    try {
+      const cssUrl = new URL('styles.css?v=20260910k', location.href).href;
+      const cssRes = await fetch(cssUrl);
+      const cssText = await cssRes.text();
+      const styleEl = pipWin.document.createElement('style');
+      styleEl.textContent = cssText;
+      pipWin.document.head.appendChild(styleEl);
+    } catch (cssErr) {
+      console.error('Could not fetch styles.css for popout window', cssErr);
+    }
 
-    const fontLink = pipWin.document.createElement('link');
-    fontLink.rel = 'stylesheet';
-    fontLink.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap';
-    pipWin.document.head.appendChild(fontLink);
+    try {
+      const fontCssRes = await fetch('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+      const fontCssText = await fontCssRes.text();
+      const fontStyleEl = pipWin.document.createElement('style');
+      fontStyleEl.textContent = fontCssText;
+      pipWin.document.head.appendChild(fontStyleEl);
+    } catch (fontErr) {
+      console.error('Could not fetch Inter font CSS for popout window', fontErr);
+    }
 
     pipWin.document.body.style.margin = '0';
     pipWin.document.body.style.background = '#fff';
@@ -1729,6 +1742,99 @@ function getSelectedSummaryDateField() {
   return checked ? checked.value : 'interactionDate';
 }
 
+function getSelectedSummaryViewMode() {
+  const checked = document.querySelector('input[name="summaryViewMode"]:checked');
+  return checked ? checked.value : 'aggregate';
+}
+
+// Groups whole audits (not individual findings) by week, for the "full compilation" view —
+// every complete audit report that happened in a given week, stacked one after another.
+function computeWeeklyCompilation(dateField) {
+  const docsToUse = latestDocs.filter(d => !d.data().deleted);
+  const weeks = {};
+
+  docsToUse.forEach(d => {
+    const data = d.data();
+    const parsed = parseDateFlexible(data[dateField]);
+
+    let weekKey, weekLabel, sortKey;
+    if (parsed) {
+      const weekEnd = getWeekEndingDate(parsed);
+      weekKey = weekEnd.getTime();
+      weekLabel = formatWeekEndingLabel(weekEnd);
+      sortKey = weekKey;
+    } else {
+      weekKey = 'unknown';
+      weekLabel = 'Unknown week (date not recognized)';
+      sortKey = -Infinity;
+    }
+
+    if (!weeks[weekKey]) weeks[weekKey] = { label: weekLabel, sortKey, audits: [] };
+    weeks[weekKey].audits.push(data);
+  });
+
+  return Object.values(weeks).sort((a, b) => b.sortKey - a.sortKey);
+}
+
+function renderWeeklyCompilation() {
+  const dateField = getSelectedSummaryDateField();
+  const weeks = computeWeeklyCompilation(dateField);
+
+  if (!weeks.length) {
+    summaryContent.innerHTML = '<p class="empty-note">No saved audits to compile yet.</p>';
+    return;
+  }
+
+  summaryContent.innerHTML = '';
+  weeks.forEach((week, idx) => {
+    const folderId = `compileFolder${idx}`;
+    const expanded = idx === 0;
+
+    const folder = document.createElement('div');
+    folder.className = 'archive-folder';
+    folder.innerHTML = `
+      <button type="button" class="folder-header" data-summary-toggle="${folderId}">
+        <span class="folder-icon">📅</span>
+        <span class="folder-label">${escapeHtml(week.label)}</span>
+        <span class="folder-count">${week.audits.length}</span>
+        <span class="folder-chevron">${expanded ? '▾' : '▸'}</span>
+      </button>
+      <div class="folder-items" id="${folderId}" style="display:${expanded ? 'flex' : 'none'};"></div>
+    `;
+    summaryContent.appendChild(folder);
+
+    const itemsContainer = folder.querySelector('.folder-items');
+    week.audits.forEach(auditData => {
+      const card = document.createElement('div');
+      card.className = 'compiled-audit-card';
+      const headerLine = `WIN ${auditData.winId || '—'} · ${auditData.agentName || 'Unnamed agent'} · Case ${auditData.caseId || '—'}`;
+      card.innerHTML = `<div class="compiled-audit-header">${escapeHtml(headerLine)}</div>${buildStaticReportHtml(auditData)}`;
+      itemsContainer.appendChild(card);
+    });
+  });
+
+  summaryContent.querySelectorAll('[data-summary-toggle]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.getAttribute('data-summary-toggle'));
+      const chevron = btn.querySelector('.folder-chevron');
+      const isOpen = target.style.display !== 'none';
+      target.style.display = isOpen ? 'none' : 'flex';
+      chevron.textContent = isOpen ? '▸' : '▾';
+    });
+  });
+}
+
+// Single entry point that renders whichever view mode is currently selected.
+function renderSummaryView() {
+  if (getSelectedSummaryViewMode() === 'compilation') {
+    renderWeeklyCompilation();
+    copySummaryBtn.style.display = 'none'; // plain-text export only makes sense for the tallied view
+  } else {
+    renderWeeklySummary();
+    copySummaryBtn.style.display = '';
+  }
+}
+
 function renderWeeklySummary() {
   const dateField = getSelectedSummaryDateField();
   const summary = computeWeeklySummary(dateField);
@@ -1798,8 +1904,8 @@ function renderWeeklySummary() {
   });
 }
 
-document.querySelectorAll('input[name="summaryDateField"]').forEach(radio => {
-  radio.addEventListener('change', renderWeeklySummary);
+document.querySelectorAll('input[name="summaryDateField"], input[name="summaryViewMode"]').forEach(radio => {
+  radio.addEventListener('change', renderSummaryView);
 });
 
 copySummaryBtn.addEventListener('click', async () => {
@@ -1892,7 +1998,7 @@ try {
     renderDeletedListFromDocs(latestDocs);
     renderArchivedListFromDocs(latestDocs);
     updateStatsWidget();
-    if (summaryModal.style.display === 'flex') renderWeeklySummary();
+    if (summaryModal.style.display === 'flex') renderSummaryView();
   }, err => {
     console.error(err);
     savedListEl.innerHTML = '<p class="empty-note">Could not connect to Firestore. Check your config and security rules.</p>';
