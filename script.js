@@ -742,14 +742,45 @@ function computeStatsHtml() {
   `;
 }
 
+// Same content as computeStatsHtml, but every style is a `style="..."` attribute
+// directly on the element instead of a class name. Three attempts at injecting a
+// stylesheet into the popped-out Picture-in-Picture window (copied CSSOM, <link>,
+// fetched-and-inlined <style>) all rendered unstyled, which points to that window
+// type specifically not applying injected stylesheets. Inline styles are read by the
+// browser as part of parsing the element itself, with no separate stylesheet step to
+// fail — this is the last resort that should be unable to fail the same way.
+function computeStatsHtmlInline() {
+  const activeDocs = latestDocs.filter(d => !d.data().deleted && !d.data().archived);
+  const total = activeDocs.length;
+  const emailed = activeDocs.filter(d => d.data().emailSent).length;
+  const logged = activeDocs.filter(d => d.data().loggedInQA).length;
+  const archivedCount = latestDocs.filter(d => d.data().archived && !d.data().deleted).length;
+
+  const rowStyle = 'display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #e2e8f0;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;';
+  const lastRowStyle = rowStyle.replace('border-bottom:1px solid #e2e8f0;', 'border-bottom:none;');
+  const labelStyle = 'color:#64748b;';
+  const valueStyle = 'font-weight:700;color:#0f172a;';
+
+  const rows = [
+    ['Active audits', total],
+    ['Emailed', `${emailed}/${total}`],
+    ['Logged in QA form', `${logged}/${total}`],
+    ['Archived', archivedCount]
+  ];
+
+  return rows.map(([label, value], i) => {
+    const style = i === rows.length - 1 ? lastRowStyle : rowStyle;
+    return `<div style="${style}"><span style="${labelStyle}">${label}</span><span style="${valueStyle}">${value}</span></div>`;
+  }).join('');
+}
+
 function updateStatsWidget() {
-  const html = computeStatsHtml();
-  if (statsWidget.style.display !== 'none') statsBody.innerHTML = html;
+  if (statsWidget.style.display !== 'none') statsBody.innerHTML = computeStatsHtml();
   // If popped out into a real system window, keep that in sync too — it has its own
   // document, so it needs its content updated independently of the in-page widget.
   if (systemPipWindow) {
     const pipBody = systemPipWindow.document.getElementById('statsBodyPip');
-    if (pipBody) pipBody.innerHTML = html;
+    if (pipBody) pipBody.innerHTML = computeStatsHtmlInline();
   }
 }
 
@@ -787,26 +818,12 @@ statsPopoutBtn.addEventListener('click', async () => {
   try {
     const pipWin = await documentPictureInPicture.requestWindow({ width: 260, height: 220 });
 
-    // Hardcoded CSS, not fetched or copied from anywhere — two different attempts to
-    // load external/copied styles into this window silently failed, so this removes
-    // any network dependency for the core styling entirely. It's a plain string
-    // already in memory, appended synchronously; nothing can fail to load.
-    const popoutCss = `
-      body{margin:0;background:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;}
-      .stats-body{padding:14px 16px;}
-      .stats-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #e2e8f0;font-size:14px;}
-      .stats-row:last-child{border-bottom:none;}
-      .stats-label{color:#64748b;}
-      .stats-value{font-weight:700;color:#0f172a;}
-    `;
-    const styleEl = pipWin.document.createElement('style');
-    styleEl.textContent = popoutCss;
-    pipWin.document.head.appendChild(styleEl);
+    pipWin.document.body.setAttribute('style', 'margin:0;background:#fff;');
 
     const container = pipWin.document.createElement('div');
     container.id = 'statsBodyPip';
-    container.className = 'stats-body';
-    container.innerHTML = computeStatsHtml();
+    container.setAttribute('style', 'padding:14px 16px;');
+    container.innerHTML = computeStatsHtmlInline();
     pipWin.document.body.appendChild(container);
 
     systemPipWindow = pipWin;
@@ -1977,6 +1994,75 @@ copySummaryBtn.addEventListener('click', async () => {
   } catch (e) {
     console.error(e);
     setStatus('Could not copy summary', 'err');
+  }
+});
+
+// Compiles every finding's full remark (not truncated) with its agent/category/parameter/
+// constraint context, grouped by week, alongside a ready-made instruction — paste the
+// result into Claude, ChatGPT, or any AI chat to get a narrative "themed trends" report
+// written from real remark text. This app can't safely call an AI itself (that would mean
+// putting an API key in public website code, stealable by anyone who views the page
+// source), so this is the safe way to get the same result using an AI chat you already have.
+document.getElementById('copyForAiBtn').addEventListener('click', async () => {
+  const dateField = getSelectedSummaryDateField();
+  const docsToUse = latestDocs.filter(d => !d.data().deleted);
+  const weeks = {};
+
+  docsToUse.forEach(d => {
+    const data = d.data();
+    const parsed = parseDateFlexible(data[dateField]);
+    const agentName = (data.agentName || 'Unnamed agent').trim() || 'Unnamed agent';
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+
+    rows.forEach(r => {
+      if (!r.category && !r.parameter && !r.constraint && !r.remark) return;
+      let weekKey, weekLabel, sortKey;
+      if (parsed) {
+        const weekEnd = getWeekEndingDate(parsed);
+        weekKey = weekEnd.getTime();
+        weekLabel = formatWeekEndingLabel(weekEnd);
+        sortKey = weekKey;
+      } else {
+        weekKey = 'unknown';
+        weekLabel = 'Unknown week (date not recognized)';
+        sortKey = -Infinity;
+      }
+      if (!weeks[weekKey]) weeks[weekKey] = { label: weekLabel, sortKey, items: [] };
+      weeks[weekKey].items.push({
+        agentName,
+        category: r.category || '—',
+        parameter: r.parameter || '—',
+        constraint: r.constraint || '—',
+        remark: (r.remark || '').replace(/\s+/g, ' ').trim()
+      });
+    });
+  });
+
+  const sortedWeeks = Object.values(weeks).sort((a, b) => b.sortKey - a.sortKey);
+  if (!sortedWeeks.length) {
+    setStatus('No findings to compile yet', 'err');
+    return;
+  }
+
+  const lines = [];
+  lines.push('Analyze the QA audit findings below and write a narrative report for each week ending, identifying systemic trends. Group related findings into clearly named themes (e.g., "CRM Documentation & Tagging Non-Compliance"), state how many of that week\'s findings exhibit each theme (e.g., "11/12 Cases"), and describe the specific behavior pattern using concrete details drawn from the remarks. Use bullet points with a bolded theme name followed by a colon and the description.');
+  lines.push('');
+
+  sortedWeeks.forEach(week => {
+    lines.push(`=== ${week.label} (${week.items.length} findings) ===`);
+    week.items.forEach((item, i) => {
+      lines.push(`${i + 1}. Agent: ${item.agentName} | ${item.category} > ${item.parameter} > ${item.constraint}`);
+      if (item.remark) lines.push(`   Remark: ${item.remark}`);
+    });
+    lines.push('');
+  });
+
+  try {
+    await navigator.clipboard.writeText(lines.join('\n').trim());
+    setStatus('Copied — paste into Claude, ChatGPT, or any AI chat to generate the report', 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus('Could not copy', 'err');
   }
 });
 
