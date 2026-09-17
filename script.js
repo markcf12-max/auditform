@@ -1582,30 +1582,33 @@ function renderArchivedListFromDocs(docs) {
     return;
   }
 
-  // Group by the week-ending date of each audit's interaction (same "week ending
-  // Sunday" convention as the Weekly Summary), rather than by when it happened to get
-  // archived — that's what actually matters for finding things later.
+  // Group by the literal Audit reference field (e.g. "WE0920") rather than a computed
+  // week — your team already uses that field as the week-batch label itself, so this
+  // matches how audits are actually organized instead of re-deriving it from a date.
+  function auditReferenceSortKey(ref) {
+    const match = ref.match(/(\d{4})\D*$/); // last 4 digits, e.g. "0920" from "WE0920"
+    if (!match) return -Infinity;
+    const month = parseInt(match[1].slice(0, 2), 10);
+    const day = parseInt(match[1].slice(2, 4), 10);
+    return (month >= 1 && month <= 12 && day >= 1 && day <= 31) ? month * 100 + day : -Infinity;
+  }
+
   const groups = {};
   const groupMeta = [];
   archived.forEach(d => {
     const data = d.data();
-    const parsed = parseDateFlexible(data.interactionDate);
-    let label, sortKey;
-    if (parsed) {
-      const weekEnd = getWeekEndingDate(parsed);
-      label = formatWeekEndingLabel(weekEnd);
-      sortKey = weekEnd.getTime();
-    } else {
-      label = 'Unknown week (date not recognized)';
-      sortKey = -Infinity;
-    }
+    const ref = (data.hdrWin || '').trim();
+    const label = ref || 'No audit reference';
+    const sortKey = ref ? auditReferenceSortKey(ref) : -Infinity;
     if (!(label in groups)) {
       groups[label] = [];
       groupMeta.push({ label, sortKey });
     }
     groups[label].push(d);
   });
-  groupMeta.sort((a, b) => b.sortKey - a.sortKey); // most recent week first
+  // Most recent week first when the reference parses as a date-like MMDD; otherwise
+  // falls back to alphabetical so nothing silently disappears from the ordering.
+  groupMeta.sort((a, b) => (b.sortKey !== a.sortKey) ? b.sortKey - a.sortKey : b.label.localeCompare(a.label));
 
   archivedListEl.innerHTML = '';
   groupMeta.forEach((g, idx) => {
@@ -1630,7 +1633,7 @@ function renderArchivedListFromDocs(docs) {
     groupDocs.forEach(d => {
       const data = d.data();
       const archivedAtLabel = data.archivedAt && data.archivedAt.toDate
-        ? data.archivedAt.toDate().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+        ? data.archivedAt.toDate().toLocaleString()
         : '';
       const item = document.createElement('div');
       item.className = 'saved-item';
