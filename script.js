@@ -749,6 +749,10 @@ function computeStatsHtml() {
 // type specifically not applying injected stylesheets. Inline styles are read by the
 // browser as part of parsing the element itself, with no separate stylesheet step to
 // fail — this is the last resort that should be unable to fail the same way.
+// Modernized card look, but every single style is repeated on every individual
+// element rather than relying on inheritance from a parent — so even if something
+// about this window resets styling between elements, each row still carries its own
+// complete, self-sufficient set of inline styles.
 function computeStatsHtmlInline() {
   const activeDocs = latestDocs.filter(d => !d.data().deleted && !d.data().archived);
   const total = activeDocs.length;
@@ -756,10 +760,10 @@ function computeStatsHtmlInline() {
   const logged = activeDocs.filter(d => d.data().loggedInQA).length;
   const archivedCount = latestDocs.filter(d => d.data().archived && !d.data().deleted).length;
 
-  const rowStyle = 'display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #e2e8f0;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;';
-  const lastRowStyle = rowStyle.replace('border-bottom:1px solid #e2e8f0;', 'border-bottom:none;');
-  const labelStyle = 'color:#64748b;';
-  const valueStyle = 'font-weight:700;color:#0f172a;';
+  const font = "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;";
+  const rowStyle = `display:flex;justify-content:space-between;align-items:center;padding:11px 14px;margin-bottom:8px;background-color:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;${font}`;
+  const labelStyle = `color:#64748b;font-size:13px;${font}`;
+  const valueStyle = `font-weight:700;color:#4f46e5;font-size:15px;${font}`;
 
   const rows = [
     ['Active audits', total],
@@ -768,10 +772,9 @@ function computeStatsHtmlInline() {
     ['Archived', archivedCount]
   ];
 
-  return rows.map(([label, value], i) => {
-    const style = i === rows.length - 1 ? lastRowStyle : rowStyle;
-    return `<div style="${style}"><span style="${labelStyle}">${label}</span><span style="${valueStyle}">${value}</span></div>`;
-  }).join('');
+  return rows.map(([label, value]) =>
+    `<div style="${rowStyle}"><span style="${labelStyle}">${label}</span><span style="${valueStyle}">${value}</span></div>`
+  ).join('');
 }
 
 function updateStatsWidget() {
@@ -818,11 +821,11 @@ statsPopoutBtn.addEventListener('click', async () => {
   try {
     const pipWin = await documentPictureInPicture.requestWindow({ width: 260, height: 220 });
 
-    pipWin.document.body.setAttribute('style', 'margin:0;background:#fff;');
+    pipWin.document.body.setAttribute('style', 'margin:0;padding:0;background-color:#ffffff;');
 
     const container = pipWin.document.createElement('div');
     container.id = 'statsBodyPip';
-    container.setAttribute('style', 'padding:14px 16px;');
+    container.setAttribute('style', 'padding:14px;background-color:#ffffff;');
     container.innerHTML = computeStatsHtmlInline();
     pipWin.document.body.appendChild(container);
 
