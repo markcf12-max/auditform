@@ -1582,29 +1582,36 @@ function renderArchivedListFromDocs(docs) {
     return;
   }
 
-  // Group by the calendar day each audit was archived, so the list reads as a set of
-  // collapsible day-folders instead of one long scroll of individual cards.
+  // Group by the week-ending date of each audit's interaction (same "week ending
+  // Sunday" convention as the Weekly Summary), rather than by when it happened to get
+  // archived — that's what actually matters for finding things later.
   const groups = {};
   const groupMeta = [];
   archived.forEach(d => {
     const data = d.data();
-    const dateObj = data.archivedAt && data.archivedAt.toDate ? data.archivedAt.toDate() : null;
-    const label = dateObj
-      ? dateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
-      : 'Unknown date';
+    const parsed = parseDateFlexible(data.interactionDate);
+    let label, sortKey;
+    if (parsed) {
+      const weekEnd = getWeekEndingDate(parsed);
+      label = formatWeekEndingLabel(weekEnd);
+      sortKey = weekEnd.getTime();
+    } else {
+      label = 'Unknown week (date not recognized)';
+      sortKey = -Infinity;
+    }
     if (!(label in groups)) {
       groups[label] = [];
-      groupMeta.push({ label, sortKey: dateObj ? dateObj.getTime() : 0 });
+      groupMeta.push({ label, sortKey });
     }
     groups[label].push(d);
   });
-  groupMeta.sort((a, b) => b.sortKey - a.sortKey); // most recent day first
+  groupMeta.sort((a, b) => b.sortKey - a.sortKey); // most recent week first
 
   archivedListEl.innerHTML = '';
   groupMeta.forEach((g, idx) => {
     const groupDocs = groups[g.label];
     const folderId = `archiveFolder${idx}`;
-    const expanded = idx === 0; // only the most recent day opens automatically
+    const expanded = idx === 0; // only the most recent week opens automatically
 
     const folder = document.createElement('div');
     folder.className = 'archive-folder';
@@ -1622,15 +1629,15 @@ function renderArchivedListFromDocs(docs) {
     const itemsContainer = folder.querySelector('.folder-items');
     groupDocs.forEach(d => {
       const data = d.data();
-      const timeLabel = data.archivedAt && data.archivedAt.toDate
-        ? data.archivedAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      const archivedAtLabel = data.archivedAt && data.archivedAt.toDate
+        ? data.archivedAt.toDate().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
         : '';
       const item = document.createElement('div');
       item.className = 'saved-item';
       item.innerHTML = `
         <div class="meta-text">
           <div class="win">WIN ${escapeHtml(data.winId || '—')} · ${escapeHtml(data.agentName || 'Unnamed agent')}</div>
-          <div class="sub">Case ${escapeHtml(data.caseId || '—')} · archived ${escapeHtml(timeLabel)}</div>
+          <div class="sub">Case ${escapeHtml(data.caseId || '—')} · archived ${escapeHtml(archivedAtLabel)}</div>
         </div>
         <div class="saved-actions">
           <button class="btn" type="button" data-view-archived="${d.id}">Load</button>
